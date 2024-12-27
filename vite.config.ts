@@ -1,12 +1,36 @@
+/*
+ * @Author: Anixuil
+ * @Date: 2024-12-26 17:19:21
+ * @LastEditors: Anixuil
+ * @LastEditTime: 2024-12-27 11:03:09
+ * @Description: 项目配置文件
+ */
 import { defineConfig } from 'vite'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import vue from '@vitejs/plugin-vue'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
+    AutoImport({
+      resolvers: [ElementPlusResolver()],
+      include: [/\.vue$/, /\.vue\?vue/, /\.md$/, /\.[tj]sx?$/],
+      imports: ['vue', 'vue-router', 'pinia'],
+      dts: 'auto-imports.d.ts'
+    }),
+    Components({
+      resolvers: [ElementPlusResolver({
+        importStyle: 'sass'
+      })],
+      dts: true,
+      include: [/\.vue$/, /\.vue\?vue/, /\.md$/],
+      exclude: [/node_modules/]
+    }),
     electron({
       main: {
         // Shortcut of `build.lib.entry`.
@@ -26,4 +50,19 @@ export default defineConfig({
         : {},
     }),
   ],
+  resolve: {
+    alias: {
+      '@': '/src',
+      '@components': '/src/components',
+      '@types': '/src/types',
+      '@renderer': '/src/renderer',
+      '@main': '/src/main',
+      '@router': '/src/router',
+      '@styles': '/src/styles',
+      '@store': '/src/store',
+      '@utils': '/src/utils',
+      '@views': '/src/views',
+      '@api': '/src/api',
+    }
+  }
 })

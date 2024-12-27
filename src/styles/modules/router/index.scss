@@ -1,0 +1,33 @@
+// 路由相关样式
+.common-fade-enter-active,
+.common-fade-leave-active {
+  transition: all 0.3s;
+}
+.common-fade-enter-from,
+.common-fade-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+// 导航栏样式
+.header-show-enter-active,
+.header-show-leave-active {
+  transition: all 0.3s;
+}
+.header-show-enter-from,
+.header-show-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+// tab标签页样式
+.tab-fade-x-enter-active,
+.tab-fade-x-leave-active {
+  transition: all .3s ease;
+}
+
+.tab-fade-x-enter-from,
+.tab-fade-x-leave-to {
+  opacity: 0;
+  transform: translateY(10%);
+}

@@ -1,0 +1,65 @@
+@use "../theme/mixins.scss" as *;
+@use "../router/index.scss" as *;
+
+// 页面基础通用样式
+.views-common-wrapper {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    @include ani-theme("color", "color");
+    @include ani-theme("background-color", "bgColor");
+}
+.theme-div {
+    @include ani-theme("color", "color");
+    @include ani-theme("background-color", "bgColor");
+}
+.card {
+    @include ani-theme("color", "cardColor");
+    @include ani-theme("background-color", "cardBgColor");
+}
+.ani-button {
+    &.el-button.is-text:not(.is-disabled):hover {
+        @include ani-theme("background-color", "btBgColor");
+    }
+}
+
+// 页面基础通用动画 矩形
+.ani-fade-rect-circle {
+    position: relative;
+    animation: wrapper-fade 1s;
+
+    &::before{
+        position: absolute;
+        content: '';
+        width: 300%;
+        aspect-ratio: 1/1;
+        background-color: #fff;
+        @include ani-theme("background-color", "primaryColor");
+        border-radius: 50%;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        transition: all .1s ease;
+        animation: fade-rect-circle 2s;
+        z-index: 99;
+    }
+
+    @keyframes fade-rect-circle {
+        0% {
+            width: 0%;
+        }
+        100% {
+            width: 300%;
+        }
+        
+    }
+
+    @keyframes wrapper-fade {
+        0% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+}

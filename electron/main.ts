@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2024-12-26 18:41:24
+ * @LastEditTime: 2024-12-27 14:31:40
  * @Description: 主线程入口
  */
 import { app, BrowserWindow } from 'electron'
@@ -35,7 +35,7 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     // 关闭菜单
     autoHideMenuBar: true,
     webPreferences: {
@@ -54,6 +54,7 @@ function createWindow() {
     // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
+  win.webContents.openDevTools()
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common

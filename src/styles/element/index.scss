@@ -1,0 +1,8 @@
+// styles/element/index.scss
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': (
+      'base': #1E1E1E, // 覆盖主题色
+    ),
+  )
+);
