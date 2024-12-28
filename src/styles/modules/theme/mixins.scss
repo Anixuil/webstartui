@@ -1,7 +1,8 @@
 @use "sass:map";
 // 主题混入工具
 @use "variables.scss" as *;
-$myMap: map.get($themes, "dark");
+// $myMap: map.get($themes, "dark");
+$myMap: ();
 // 混合
 @mixin ani-theme-mixin {
     @each $theme-name, $map in $themes {

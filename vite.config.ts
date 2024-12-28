@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2024-12-27 11:03:09
+ * @LastEditTime: 2024-12-28 09:52:11
  * @Description: 项目配置文件
  */
 import { defineConfig } from 'vite'
@@ -12,6 +12,7 @@ import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+// import ElementPlus from 'unplugin-element-plus/vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -49,6 +50,9 @@ export default defineConfig({
         ? undefined
         : {},
     }),
+    // ElementPlus({
+    //   useSource: true
+    // })
   ],
   resolve: {
     alias: {
@@ -64,5 +68,12 @@ export default defineConfig({
       '@views': '/src/views',
       '@api': '/src/api',
     }
-  }
+  },
+  // css: {
+  //   preprocessorOptions: {
+  //     scss: {
+  //       additionalData: `@use "@styles/element/index.scss" as *;`,
+  //     },
+  //   },
+  // },
 })

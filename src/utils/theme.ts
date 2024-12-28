@@ -4,9 +4,12 @@ window.setGlobalTheme = (theme = 'light') => {
     if (theme === 'dark') {
         document.body.classList.add('ani-theme-dark')
         document.body.classList.remove('ani-theme-light')
+        // 暗黑模式需要给html添加dark的class
+        document.documentElement.classList.add('dark')
     } else {
         document.body.classList.add('ani-theme-light')
         document.body.classList.remove('ani-theme-dark')
+        document.documentElement.classList.add('light')
     }
 }
 
