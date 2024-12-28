@@ -4,16 +4,23 @@ window.setGlobalTheme = (theme = 'light') => {
     if (theme === 'dark') {
         document.body.classList.add('ani-theme-dark')
         document.body.classList.remove('ani-theme-light')
+        // 删除light的class
+        document.documentElement.classList.remove('light')
         // 暗黑模式需要给html添加dark的class
         document.documentElement.classList.add('dark')
     } else {
         document.body.classList.add('ani-theme-light')
         document.body.classList.remove('ani-theme-dark')
+        document.documentElement.classList.remove('dark')
         document.documentElement.classList.add('light')
     }
 }
 
-window.setGlobalThemeColor = (color = '#1E1E1E') => {
+window.setGlobalThemeColor = (color = '') => {
+    console.log('setGlobalThemeColor', color);
+    console.log('window.globalTheme', window.globalTheme);
+    
+    color = color || (window.globalTheme === 'dark' ? '#4A148C' : '#1e1e1e')
     window.globalThemeColor = color
     const el: HTMLElement | null = document.documentElement;
     if (el === null) {
@@ -51,13 +58,17 @@ var listeners: Record<string, Function> = {
     dark: function (mediaQueryList: MediaQueryList) {
         if (mediaQueryList.matches) {
             // ElMessage.success('您切换到深色模式了！')
+            console.log('switch to dark mode');
             window.setGlobalTheme('dark')
+            window.setGlobalThemeColor()
         }
     },
     light: function (mediaQueryList: MediaQueryList) {
         if (mediaQueryList.matches) {
             // ElMessage.success('您切换到浅色模式了！')
+            console.log('switch to light mode');
             window.setGlobalTheme('light')
+            window.setGlobalThemeColor()
         }
     }
 }

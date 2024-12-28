@@ -2,16 +2,21 @@
  * @Author: Anixuil
  * @Date: 2024-12-27 09:52:14
  * @LastEditors: Anixuil
- * @LastEditTime: 2024-12-27 14:54:03
+ * @LastEditTime: 2024-12-28 10:12:52
  * @Description: 首页
 -->
 <template>
     <div class="views-common-wrapper">
-        <el-table :data="tableData" height="250" style="width: 100%">
-            <el-table-column prop="date" label="Date" width="180" />
-            <el-table-column prop="name" label="Name" width="180" />
-            <el-table-column prop="address" label="Address" />
-        </el-table>
+        <div class="table-container">
+            <div class="table-header-menu">
+                <el-button type="primary">新建项目</el-button>
+            </div>
+            <el-table :data="tableData" height="400" style="width: 100%">
+                <el-table-column prop="date" label="Date" width="180" />
+                <el-table-column prop="name" label="Name" width="180" />
+                <el-table-column prop="address" label="Address" />
+            </el-table>
+        </div>
     </div>
 </template>
 
@@ -55,4 +60,18 @@ const tableData = ref([{
 ])
 </script>
 
-<style scoped lang="scss"></style>
+<style scoped lang="scss">
+.views-common-wrapper{
+    .table-container{
+        width: 100%;
+        max-width: 1200px;
+        min-width: 600px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
+</style>
