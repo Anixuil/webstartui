@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2024-12-28 09:52:11
+ * @LastEditTime: 2024-12-30 00:40:04
  * @Description: 项目配置文件
  */
 import { defineConfig } from 'vite'
@@ -12,6 +12,7 @@ import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import renderer from 'vite-plugin-electron-renderer'
 // import ElementPlus from 'unplugin-element-plus/vite'
 
 // https://vitejs.dev/config/
@@ -50,6 +51,11 @@ export default defineConfig({
         ? undefined
         : {},
     }),
+    // renderer({
+    //   resolve: {
+    //     sqlite3: { type: 'cjs' }
+    //   }
+    // })
     // ElementPlus({
     //   useSource: true
     // })
@@ -67,13 +73,26 @@ export default defineConfig({
       '@utils': '/src/utils',
       '@views': '/src/views',
       '@api': '/src/api',
+      '@assets': '/src/assets',
     }
   },
-  // css: {
-  //   preprocessorOptions: {
-  //     scss: {
-  //       additionalData: `@use "@styles/element/index.scss" as *;`,
-  //     },
-  //   },
-  // },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: `
+          @use "@styles/modules/theme/variables.scss" as *;
+        @use "@styles/modules/theme/mixins.scss" as *;
+        `,
+        api: 'modern-compiler', // 设置scss的api类型为modern-compiler 以支持新特性
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      external: ["sqlite3", "electron"],
+      output: {
+        entryFileNames: '[name].cjs',
+      },
+    },
+  }
 })

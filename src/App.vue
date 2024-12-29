@@ -1,5 +1,13 @@
+<!--
+ * @Author: Anixuil
+ * @Date: 2024-12-26 17:19:21
+ * @LastEditors: Anixuil
+ * @LastEditTime: 2024-12-29 23:28:38
+ * @Description: 请填写简介
+-->
 <template>
   <div class="views-common-wrapper">
+    <SideBar />
     <router-view v-slot="{ Component }">
       <Transition :name="transitionName" mode="out-in">
         <component :is="Component" />

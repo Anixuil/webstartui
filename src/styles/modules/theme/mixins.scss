@@ -1,25 +1,18 @@
 @use "sass:map";
-// 主题混入工具
 @use "variables.scss" as *;
-// $myMap: map.get($themes, "dark");
-$myMap: ();
-// 混合
+
+// 主题混入工具
 @mixin ani-theme-mixin {
-    @each $theme-name, $map in $themes {
-        $myMap: $map; // 全局变量
+    @each $theme-name, $theme-map in $themes {
         .ani-theme-#{$theme-name} & {
-            @content;
+            @content($theme-map);
         }
     }
 }
 
 // 从主题色map中取出对应颜色
-@function themed($key) {
-    @return map.get($myMap, $key);
-}
-
 @mixin ani-theme($key, $colorName: $key) {
-    @include ani-theme-mixin {
-        #{$key}: themed($colorName);
+    @include ani-theme-mixin using ($theme-map) {
+        #{$key}: map.get($theme-map, $colorName);
     }
 }

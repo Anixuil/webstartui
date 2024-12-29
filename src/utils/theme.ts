@@ -17,9 +17,6 @@ window.setGlobalTheme = (theme = 'light') => {
 }
 
 window.setGlobalThemeColor = (color = '') => {
-    console.log('setGlobalThemeColor', color);
-    console.log('window.globalTheme', window.globalTheme);
-    
     color = color || (window.globalTheme === 'dark' ? '#4A148C' : '#1e1e1e')
     window.globalThemeColor = color
     const el: HTMLElement | null = document.documentElement;
