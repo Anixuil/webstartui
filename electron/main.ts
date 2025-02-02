@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-02 12:07:49
+ * @LastEditTime: 2025-02-02 12:37:48
  * @Description: 主线程入口
  */
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
@@ -288,7 +288,7 @@ async function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
   // 开发者工具
-  win.webContents.openDevTools()
+  // win.webContents.openDevTools()
 
   // 是否是第一次运行
   ipcMain.handle('is-first-run', async () => {
