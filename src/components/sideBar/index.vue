@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-29 17:57:15
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-02 11:25:10
+ * @LastEditTime: 2025-02-02 12:29:45
  * @Description: 侧边栏
 -->
 <template>
@@ -14,17 +14,27 @@
         <el-drawer v-model="drawerVisible" direction="ltr" size="250">
             <!-- <template #header>WebStartUI Nav</template> -->
             <template #default>
-                <ul class="menu-wrapper">
-                    <li v-for="(item, index) in menuList" :key="index"
-                        :class="['menu-item', currentMenuIndex === index && 'active']" @click="goMenu(index)">
-                        <el-icon>
-                            <component :is="item.icon"></component>
-                        </el-icon>
-                        <span>
-                            {{ item.name }}
-                        </span>
-                    </li>
-                </ul>
+                <div class="sidebar-container">
+                    <ul class="menu-wrapper">
+                        <li v-for="(item, index) in menuList" :key="index"
+                            :class="['menu-item', currentMenuIndex === index && 'active']" @click="goMenu(index)">
+                            <el-icon>
+                                <component :is="item.icon"></component>
+                            </el-icon>
+                            <span>
+                                {{ item.name }}
+                            </span>
+                        </li>
+                    </ul>
+                    <div class="sidebar-footer">
+                        <el-tooltip content="切换主题" placement="top">
+                            <label class="switch">
+                                <span @click="toggleTheme"
+                                    :class="['slider', globalTheme === 'light' && 'active']"></span>
+                            </label>
+                        </el-tooltip>
+                    </div>
+                </div>
             </template>
         </el-drawer>
     </div>
@@ -65,6 +75,12 @@ const goMenu = (index: number) => {
     drawerVisible.value = false
     router.push(path)
 }
+
+const globalTheme = computed(() => store.getGlobalTheme)
+// 切换主题
+const toggleTheme = () => {
+    store.setGlobalTheme(globalTheme.value === 'dark' ? 'light' : 'dark')
+}
 </script>
 
 <style scoped lang="scss">
@@ -91,39 +107,120 @@ const goMenu = (index: number) => {
         padding: 0;
     }
 
-    .menu-wrapper {
-        width: 100%;
+    .sidebar-container {
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        list-style: none;
+        justify-content: space-between;
+        height: 100%;
         box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        gap: 10px;
+        padding: 0 0 10px 0;
 
-        .menu-item {
-            width: 75%;
-            height: 50px;
-            border-radius: 10px;
-            margin: 0;
-            gap: 10px;
-            box-sizing: border-box;
-            padding: 0;
+        .menu-wrapper {
+            width: 100%;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            @include ani-theme("color", "color");
+            list-style: none;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            gap: 10px;
 
-            &:hover,
-            &.active {
-                @include ani-theme('color', 'hoverColor');
-                @include ani-theme("background-color", "hoverBgColor");
+            .menu-item {
+                width: 75%;
+                height: 50px;
+                border-radius: 10px;
+                margin: 0;
+                gap: 10px;
+                box-sizing: border-box;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                cursor: pointer;
+                transition: all 0.3s;
+                @include ani-theme("color", "color");
+
+                &:hover,
+                &.active {
+                    @include ani-theme('color', 'hoverColor');
+                    @include ani-theme("background-color", "hoverBgColor");
+                }
             }
         }
+
+        .sidebar-footer {
+            box-sizing: border-box;
+            padding: 0 10px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+
+            /* From Uiverse.io by alexruix */
+            /* The switch - the box around the slider */
+            .switch {
+                font-size: 17px;
+                position: relative;
+                display: inline-block;
+                width: 50px;
+                height: 25px;
+            }
+
+            /* Hide default HTML checkbox */
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+            /* The slider */
+            .slider {
+                --background: #28096b;
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: var(--background);
+                transition: .5s;
+                border-radius: 30px;
+            }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 20px;
+                width: 20px;
+                border-radius: 50%;
+                left: 10%;
+                bottom: 10%;
+                box-shadow: inset 8px -4px 0px 0px #fff000;
+                background: var(--background);
+                transition: .5s;
+            }
+
+            .slider.active {
+                // background-color: #522ba7;
+                @include ani-theme("background-color", "hoverBgColor");
+            }
+
+            .slider.active:before {
+                transform: translateX(100%);
+                box-shadow: inset 15px -4px 0px 15px #fff000;
+            }
+
+            // input:checked+.slider {
+            //     background-color: #522ba7;
+            // }
+
+            // input:checked+.slider:before {
+            //     transform: translateX(100%);
+            //     box-shadow: inset 15px -4px 0px 15px #fff000;
+            // }
+        }
     }
+
 }
 </style>
