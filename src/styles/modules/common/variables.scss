@@ -1,0 +1,36 @@
+// 变量
+:root {
+    --ani-primary-light-color: #1e1e1e;
+    --ani-primary-dark-color: #4A148C;
+}
+
+// 主色
+$ani-primary-light-color: var(--ani-primary-light-color);
+$ani-primary-dark-color: var(--ani-primary-dark-color);
+
+// 背景色
+$ani-bg-light-color: #f6f6f6;
+$ani-bg-light-card-color: #ffffff;
+$ani-bt-bg-light-card-color: #f6f6f6;
+$ani-bg-dark-color: #141414;
+// $ani-bg-dark-color: #21283066;
+$ani-bg-dark-card-color: #0e1116;
+$ani-bt-bg-dark-card-color: #262c32;
+
+// 字体颜色
+$ani-font-light-color: black;
+$ani-font-dark-color: white;
+$ani-font-light-color-2: #666;
+$ani-font-dark-color-2: #999;
+
+
+// 边框颜色
+$ani-border-light-color: #e8e8e8;
+$ani-border-dark-color: #333;
+$ani-border-light: 1px solid $ani-border-light-color;
+$ani-border-dark: 1px solid $ani-border-dark-color;
+
+// 阴影颜色
+$ani-shadow-light-color: 0 0 10px 0 rgba(212, 212, 212, 0.5);
+$ani-shadow-dark-color: 0 0 10px 0 rgba(0, 0, 0, 0.5);
+

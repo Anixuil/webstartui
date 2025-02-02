@@ -1,0 +1,36 @@
+// 主题颜色设置
+@use "../common/variables.scss" as *;
+// @import '../common/variables.scss';
+// 混合
+$themes:(   // 主题颜色
+    dark:(  // 暗色
+        color: $ani-font-dark-color,  // 字体颜色
+        secondaryColor: $ani-font-dark-color-2, // 次要字体颜色
+        primaryColor: $ani-primary-dark-color,  //  主色
+        bgColor: $ani-bg-dark-color,     // 背景色
+        cardBgColor: $ani-bg-dark-card-color, // 卡片背景色
+        dialogBgColor: $ani-bg-dark-color, // 弹窗背景色
+        btColor: $ani-font-light-color, // 按钮字体颜色
+        btBgColor: $ani-bt-bg-dark-card-color, // 按钮背景色
+        borderColor: $ani-border-dark-color, // 边框颜色
+        border: $ani-border-dark, // 边框
+        boxShadow: $ani-shadow-dark-color, // 阴影颜色
+        hoverBgColor: $ani-bg-light-color,   // 鼠标悬浮背景色
+        hoverColor: $ani-font-light-color,   // 鼠标悬浮字体颜色
+    ),
+    light:( // 亮色
+        color: $ani-font-light-color,  // 字体颜色
+        secondaryColor: $ani-font-light-color-2, // 次要字体颜色
+        primaryColor: $ani-primary-light-color, // 主色
+        bgColor: $ani-bg-light-card-color,     // 背景色
+        cardBgColor: $ani-bg-light-card-color, // 卡片背景色
+        dialogBgColor: $ani-bg-light-card-color, // 弹窗背景色
+        btColor: $ani-font-dark-color, // 按钮字体颜色
+        btBgColor: $ani-bt-bg-light-card-color, // 按钮背景色
+        borderColor: $ani-border-light-color, // 边框颜色
+        border: $ani-border-light, // 边框
+        boxShadow: $ani-shadow-light-color, // 阴影颜色
+        hoverBgColor: $ani-bg-dark-color,   // 鼠标悬浮背景色
+        hoverColor: $ani-font-dark-color,   // 鼠标悬浮字体颜色
+    )
+)

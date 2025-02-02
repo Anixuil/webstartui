@@ -1,0 +1,58 @@
+// @see - https://www.electron.build/configuration/configuration
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.anixuil.webstartui",
+  "asar": true,
+  "productName": "WebStartUI",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "dist-electron"
+  ],
+  "mac": {
+    "target": [
+      "dmg"
+    ],
+    "icon":"public/liuxing.png",
+    "artifactName": "${productName}-Mac-${version}-Installer.${ext}",
+    "publish": {
+      "provider": "generic",
+      "url": "https://download.anixuil.top/webstartui/update/latest.yml"
+    }
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon":"public/liuxing.png",
+    "artifactName": "${productName}-Windows-${version}-Setup.${ext}",
+    "publish": {
+      "provider": "generic",
+      "url": "https://download.anixuil.top/webstartui/update/latest.yml"
+    }
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "icon":"public/liuxing.png",
+    "artifactName": "${productName}-Linux-${version}.${ext}",
+    "publish": {
+      "provider": "generic",
+      "url": "https://download.anixuil.top/webstartui/update/latest.yml"
+    }
+  }
+}
