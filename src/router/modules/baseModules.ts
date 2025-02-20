@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-27 09:51:15
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-01-01 16:07:51
+ * @LastEditTime: 2025-02-19 08:56:47
  * @Description: 基本路由模块
  */
 export default [
@@ -35,6 +35,15 @@ export default [
         component: () => import('@views/config.vue'),
         meta: {
             title: '环境配置',
+            transition: 'common-fade'
+        }
+    },
+    {
+        path: '/chat',
+        name: 'Chat',
+        component: () => import('@views/chat.vue'),
+        meta: {
+            title: '聊天',
             transition: 'common-fade'
         }
     },

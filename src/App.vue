@@ -2,17 +2,19 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-01-21 15:34:25
+ * @LastEditTime: 2025-02-19 23:30:10
  * @Description: 请填写简介
 -->
 <template>
   <div class="views-common-wrapper">
     <SideBar />
     <router-view v-slot="{ Component }">
+    <KeepAlive>
       <Transition :name="transitionName" mode="out-in">
         <component :is="Component" />
       </Transition>
-    </router-view>
+    </KeepAlive>
+      </router-view>
     <CheckUpdate />
     <UpdateLog />
   </div>

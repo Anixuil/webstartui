@@ -2,10 +2,10 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-02 12:37:48
+ * @LastEditTime: 2025-02-19 23:31:16
  * @Description: 主线程入口
  */
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Tray } from 'electron'
 import checkUpdate, { update } from './checkUpdate'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -262,7 +262,7 @@ function monitorPort(port: number) {
     }
   }, 5000);
 }
-
+let tray = null
 async function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
@@ -288,7 +288,53 @@ async function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
   // 开发者工具
-  // win.webContents.openDevTools()
+  win.webContents.openDevTools()
+
+  // 关闭窗口时回调
+  win.on('close', (e) => {
+    e.preventDefault() // 阻止默认行为
+    win?.setSkipTaskbar(true) // 隐藏任务栏图标
+    win?.hide() // 隐藏窗口
+
+  })
+
+  // 创建托盘图标
+  tray = new Tray(path.join(process.env.VITE_PUBLIC, 'favicon.ico'))
+  
+  // 创建上下文菜单
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '打开主窗口',
+      click: () => {
+        win?.show()
+        win?.setSkipTaskbar(false) // 显示任务栏图标
+      }
+    },
+    {
+      label: '退出',
+      click: () => {
+        if (process.platform !== 'darwin') {
+          win?.destroy();
+          app.quit()
+          win = null
+          tray = null
+        }
+        db.close((err: any) => {
+          if (err) {
+            console.error(err.message);
+          } else {
+            console.log('Close the database connection.');
+          }
+        })
+      }
+    }
+  ])
+
+  tray.setToolTip('WebStartUI') // 设置托盘图标提示文字
+  tray.setContextMenu(contextMenu) // 设置托盘图标上下文菜单
+  tray.on('click', () => {
+    win?.show()
+  })
 
   // 是否是第一次运行
   ipcMain.handle('is-first-run', async () => {
@@ -480,23 +526,26 @@ async function createWindow() {
       try {
         switch (params.type) {
           case 'insert':
-            // 插入数据时，检测projectLocalUrl是否已存在，如果已存在，不允许插入
-            const project: any[] = await queryData({
-              table: 'project_table',
-              type: 'query',
-              data: {
-                project_local_url: params.data.project_local_url
+            if (params.table === 'project_table') {
+              // 插入数据时，检测projectLocalUrl是否已存在，如果已存在，不允许插入
+              const project: any[] = await queryData({
+                table: 'project_table',
+                type: 'query',
+                data: {
+                  project_local_url: params.data.project_local_url
+                }
+              });
+              if (project.length > 0) {
+                reject('已存在同路径项目，请勿重复添加');
+                return;
               }
-            });
-            if (project.length > 0) {
-              reject('已存在同路径项目，请勿重复添加');
-              return;
-            }
-            // 插入数据时，同时对项目地址下的配置文件进行写入
-            const configFilePath = params.data.project_local_url + '\\' + params.data.project_config_file_name;
-            console.log('configFilePath', configFilePath);
+              // 插入数据时，同时对项目地址下的配置文件进行写入
+              const configFilePath = params.data.project_local_url + '\\' + params.data.project_config_file_name;
+              console.log('configFilePath', configFilePath);
 
-            await fs.promises.writeFile(configFilePath, params.data.project_config);
+              await fs.promises.writeFile(configFilePath, params.data.project_config);
+            }
+            
             const id = await insertData(params);
             resolve(id);
             break;
@@ -505,25 +554,46 @@ async function createWindow() {
             resolve(count);
             break;
           case 'update':
-            // 更新数据时，如果是项目一些配置信息变动，比如projectPort,projectConfig,projectBackendUrl，需要对比项目地址是否变动，如果变动，需要更新项目状态为未启动，如果未变动，则需要进入项目地址下更换配置文件的端口号，以及整个配置文件
-            if (params.data.project_local_url) {
-              const project: any[] = await queryData({
-                table: 'project_table',
-                type: 'query',
-                data: {
-                  project_id: params.condition.project_id || params.data.project_id
+            if (params.table === 'project_table') {
+              // 更新数据时，如果是项目一些配置信息变动，比如projectPort,projectConfig,projectBackendUrl，需要对比项目地址是否变动，如果变动，需要更新项目状态为未启动，如果未变动，则需要进入项目地址下更换配置文件的端口号，以及整个配置文件
+              if (params.data.project_local_url) {
+                const project: any[] = await queryData({
+                  table: 'project_table',
+                  type: 'query',
+                  data: {
+                    project_id: params.condition.project_id || params.data.project_id
+                  }
+                });
+                if (project.length === 0) {
+                  reject('未找到项目');
+                  return;
                 }
-              });
-              if (project.length === 0) {
-                reject('未找到项目');
-                return;
+                if (project[0].projectLocalUrl !== params.data.project_local_url) {
+                  params.data.project_status = '0';
+                } else {
+                  // 更换配置文件
+                  const configFilePath = params.data.project_local_url + '/' + params.data.project_config_file_name;
+                  await fs.promises.writeFile(configFilePath, params.data.project_config);
+                }
               }
-              if (project[0].projectLocalUrl !== params.data.project_local_url) {
-                params.data.project_status = '0';
+            } else if (params.table === 'ai_chat_history') {
+              // 先查询，如果存在，则更新，否则插入
+              const aiChatHistory: any[] = await queryData({
+                table: 'ai_chat_history',
+                type: 'query',
+                data: {}
+              });
+              if (aiChatHistory.length > 0) {
+                // 更新
+                params.condition = {
+                  ai_chat_history_id: aiChatHistory[0].ai_chat_history_id
+                }
+                const updateCount = await updateData(params);
+                resolve(updateCount);
               } else {
-                // 更换配置文件
-                const configFilePath = params.data.project_local_url + '/' + params.data.project_config_file_name;
-                await fs.promises.writeFile(configFilePath, params.data.project_config);
+                // 插入
+                const id = await insertData(params);
+                resolve(id);
               }
             }
             const updateCount = await updateData(params);
@@ -801,19 +871,19 @@ async function createWindow() {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-    win = null
-  }
-  db.close((err: any) => {
-    if (err) {
-      console.error(err.message);
-    } else {
-      console.log('Close the database connection.');
-    }
-  })
-})
+// app.on('window-all-closed', () => {
+//   if (process.platform !== 'darwin') {
+//     app.quit()
+//     win = null
+//   }
+//   db.close((err: any) => {
+//     if (err) {
+//       console.error(err.message);
+//     } else {
+//       console.log('Close the database connection.');
+//     }
+//   })
+// })
 
 // 激活窗口
 app.on('activate', () => {
@@ -876,6 +946,18 @@ db.serialize(() => {
     sys_version TEXT, -- 系统版本
     sys_update_time datetime -- 系统更新时间
   );`, (err: any) => {
+    if (err) {
+      console.error(err.message);
+    }
+  })
+  db.run(`CREATE TABLE IF NOT EXISTS ai_chat_history (
+      ai_chat_history_id INTEGER PRIMARY KEY AUTOINCREMENT, -- 聊天记录id
+      ai_chat_history_content TEXT, -- 聊天记录内容
+      ai_chat_history_time datetime, -- 聊天记录时间
+      ai_chat_history_usage TEXT, -- 聊天记录使用情况
+      create_time datetime, -- 创建时间
+      update_time datetime -- 更新时间
+    );`, (err: any) => {
     if (err) {
       console.error(err.message);
     }

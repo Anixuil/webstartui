@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-29 17:57:15
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-02 12:29:45
+ * @LastEditTime: 2025-02-20 19:48:46
  * @Description: 侧边栏
 -->
 <template>
@@ -59,6 +59,11 @@ const menuList = ref([
     //     path: '/config',
     //     icon: 'Setting'
     // },
+    {
+        name: 'GPT',
+        path: '/chat',
+        icon: 'Platform'
+    },
     {
         name: '关于',
         path: '/about',

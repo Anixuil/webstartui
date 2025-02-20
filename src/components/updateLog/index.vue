@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2025-01-21 15:32:50
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-02 12:35:26
+ * @LastEditTime: 2025-02-19 23:13:09
  * @Description: 更新日志
 -->
 <template>
@@ -23,16 +23,24 @@
                                 p-id="4225"></path>
                         </svg>
                     </div>
-                    <span class="title">更新日志 v1.0.1</span>
+                    <span class="title">更新日志 v1.0.2</span>
                 </div>
+                <!-- 1.0.2 -->
                 <p class="paragraph">
+                    <el-tag type="success">更新</el-tag><br />
+                    1、新增软件后台留存功能<br>
+                    2、集成DeepSeek大模型<br>
+                    <!-- <el-tag type="danger">修复</el-tag><br /> -->
+                </p>
+                <!-- 1.0.1 -->
+                <!-- <p class="paragraph">
                     <el-tag type="success">更新</el-tag><br />
                     1、新增更新日志功能<br>
                     2、新增主题切换功能<br>
                     <el-tag type="danger">修复</el-tag><br />
                     1、修复并优化部分样式<br>
                     2、优化侧边栏交互逻辑<br>
-                </p>
+                </p> -->
                 <div data-direction="right" data-position="bottom" class="carousel">
                     <span class="carousel__text">- UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG -
                         UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG - UPDATE LOG
