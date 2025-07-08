@@ -9,7 +9,7 @@
     <div class="views-common-wrapper">
         <span>
             <span class="title">WebStartUI</span>
-            <span class="version"> v1.0.2</span>
+            <span class="version"> v1.0.3</span>
         </span>
         <el-button type="primary" @click="goHome">即刻体验</el-button>
     </div>

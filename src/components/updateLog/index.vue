@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2025-01-21 15:32:50
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-19 23:13:09
+ * @LastEditTime: 2025-04-14 17:20:56
  * @Description: 更新日志
 -->
 <template>
@@ -23,15 +23,19 @@
                                 p-id="4225"></path>
                         </svg>
                     </div>
-                    <span class="title">更新日志 v1.0.2</span>
+                    <span class="title">更新日志 v1.0.3</span>
                 </div>
-                <!-- 1.0.2 -->
+                <!-- 1.0.3 -->
                 <p class="paragraph">
+                    <el-tag type="success">更新</el-tag><br />
+                    1、优化DeepSeek大模型，原生DeepSeek-api<br>
+                </p>
+                <!-- 1.0.2 -->
+                <!-- <p class="paragraph">
                     <el-tag type="success">更新</el-tag><br />
                     1、新增软件后台留存功能<br>
                     2、集成DeepSeek大模型<br>
-                    <!-- <el-tag type="danger">修复</el-tag><br /> -->
-                </p>
+                </p> -->
                 <!-- 1.0.1 -->
                 <!-- <p class="paragraph">
                     <el-tag type="success">更新</el-tag><br />

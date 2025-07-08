@@ -2,7 +2,7 @@
  * @Author: Anixuil
  * @Date: 2024-12-26 17:19:21
  * @LastEditors: Anixuil
- * @LastEditTime: 2025-02-20 23:11:58
+ * @LastEditTime: 2025-04-14 17:18:44
  * @Description: 主线程入口
  */
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Tray } from 'electron'

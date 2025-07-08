@@ -1,31 +1,2268 @@
-import require$$1$5, { app, BrowserWindow, Tray, Menu, ipcMain, dialog } from "electron";
-import require$$0 from "events";
-import require$$0$2 from "crypto";
-import require$$1 from "tty";
-import require$$1$1 from "util";
-import require$$2 from "os";
-import require$$1$2, { createWriteStream } from "fs";
+import require$$1$4, { app, BrowserWindow, Tray, Menu, ipcMain, dialog } from "electron";
+import require$$1, { createWriteStream } from "fs";
+import require$$0 from "constants";
 import require$$0$1 from "stream";
-import require$$4 from "url";
-import require$$1$3 from "string_decoder";
-import require$$0$3 from "constants";
+import require$$4 from "util";
 import require$$5 from "assert";
-import require$$1$4 from "path";
-import require$$1$6 from "child_process";
-import require$$15 from "zlib";
-import require$$4$1 from "http";
+import require$$1$1 from "path";
+import require$$1$5 from "child_process";
+import require$$0$2 from "events";
+import require$$0$3 from "crypto";
+import require$$1$2 from "tty";
+import require$$2 from "os";
+import require$$4$1 from "url";
+import require$$1$3 from "string_decoder";
+import require$$14 from "zlib";
+import require$$4$2 from "http";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import path$i from "node:path";
+import path$m from "node:path";
 import fs$j from "node:fs";
 var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
 var main$1 = {};
+var fs$i = {};
+var universalify$1 = {};
+universalify$1.fromCallback = function(fn) {
+  return Object.defineProperty(function(...args) {
+    if (typeof args[args.length - 1] === "function") fn.apply(this, args);
+    else {
+      return new Promise((resolve, reject) => {
+        args.push((err, res) => err != null ? reject(err) : resolve(res));
+        fn.apply(this, args);
+      });
+    }
+  }, "name", { value: fn.name });
+};
+universalify$1.fromPromise = function(fn) {
+  return Object.defineProperty(function(...args) {
+    const cb = args[args.length - 1];
+    if (typeof cb !== "function") return fn.apply(this, args);
+    else {
+      args.pop();
+      fn.apply(this, args).then((r) => cb(null, r), cb);
+    }
+  }, "name", { value: fn.name });
+};
+var constants$2 = require$$0;
+var origCwd = process.cwd;
+var cwd = null;
+var platform = process.env.GRACEFUL_FS_PLATFORM || process.platform;
+process.cwd = function() {
+  if (!cwd)
+    cwd = origCwd.call(process);
+  return cwd;
+};
+try {
+  process.cwd();
+} catch (er) {
+}
+if (typeof process.chdir === "function") {
+  var chdir = process.chdir;
+  process.chdir = function(d) {
+    cwd = null;
+    chdir.call(process, d);
+  };
+  if (Object.setPrototypeOf) Object.setPrototypeOf(process.chdir, chdir);
+}
+var polyfills$1 = patch$3;
+function patch$3(fs2) {
+  if (constants$2.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
+    patchLchmod(fs2);
+  }
+  if (!fs2.lutimes) {
+    patchLutimes(fs2);
+  }
+  fs2.chown = chownFix(fs2.chown);
+  fs2.fchown = chownFix(fs2.fchown);
+  fs2.lchown = chownFix(fs2.lchown);
+  fs2.chmod = chmodFix(fs2.chmod);
+  fs2.fchmod = chmodFix(fs2.fchmod);
+  fs2.lchmod = chmodFix(fs2.lchmod);
+  fs2.chownSync = chownFixSync(fs2.chownSync);
+  fs2.fchownSync = chownFixSync(fs2.fchownSync);
+  fs2.lchownSync = chownFixSync(fs2.lchownSync);
+  fs2.chmodSync = chmodFixSync(fs2.chmodSync);
+  fs2.fchmodSync = chmodFixSync(fs2.fchmodSync);
+  fs2.lchmodSync = chmodFixSync(fs2.lchmodSync);
+  fs2.stat = statFix(fs2.stat);
+  fs2.fstat = statFix(fs2.fstat);
+  fs2.lstat = statFix(fs2.lstat);
+  fs2.statSync = statFixSync(fs2.statSync);
+  fs2.fstatSync = statFixSync(fs2.fstatSync);
+  fs2.lstatSync = statFixSync(fs2.lstatSync);
+  if (fs2.chmod && !fs2.lchmod) {
+    fs2.lchmod = function(path2, mode, cb) {
+      if (cb) process.nextTick(cb);
+    };
+    fs2.lchmodSync = function() {
+    };
+  }
+  if (fs2.chown && !fs2.lchown) {
+    fs2.lchown = function(path2, uid, gid, cb) {
+      if (cb) process.nextTick(cb);
+    };
+    fs2.lchownSync = function() {
+    };
+  }
+  if (platform === "win32") {
+    fs2.rename = typeof fs2.rename !== "function" ? fs2.rename : function(fs$rename) {
+      function rename2(from, to, cb) {
+        var start = Date.now();
+        var backoff = 0;
+        fs$rename(from, to, function CB(er) {
+          if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
+            setTimeout(function() {
+              fs2.stat(to, function(stater, st) {
+                if (stater && stater.code === "ENOENT")
+                  fs$rename(from, to, CB);
+                else
+                  cb(er);
+              });
+            }, backoff);
+            if (backoff < 100)
+              backoff += 10;
+            return;
+          }
+          if (cb) cb(er);
+        });
+      }
+      if (Object.setPrototypeOf) Object.setPrototypeOf(rename2, fs$rename);
+      return rename2;
+    }(fs2.rename);
+  }
+  fs2.read = typeof fs2.read !== "function" ? fs2.read : function(fs$read) {
+    function read(fd, buffer, offset, length, position, callback_) {
+      var callback;
+      if (callback_ && typeof callback_ === "function") {
+        var eagCounter = 0;
+        callback = function(er, _, __) {
+          if (er && er.code === "EAGAIN" && eagCounter < 10) {
+            eagCounter++;
+            return fs$read.call(fs2, fd, buffer, offset, length, position, callback);
+          }
+          callback_.apply(this, arguments);
+        };
+      }
+      return fs$read.call(fs2, fd, buffer, offset, length, position, callback);
+    }
+    if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
+    return read;
+  }(fs2.read);
+  fs2.readSync = typeof fs2.readSync !== "function" ? fs2.readSync : /* @__PURE__ */ function(fs$readSync) {
+    return function(fd, buffer, offset, length, position) {
+      var eagCounter = 0;
+      while (true) {
+        try {
+          return fs$readSync.call(fs2, fd, buffer, offset, length, position);
+        } catch (er) {
+          if (er.code === "EAGAIN" && eagCounter < 10) {
+            eagCounter++;
+            continue;
+          }
+          throw er;
+        }
+      }
+    };
+  }(fs2.readSync);
+  function patchLchmod(fs22) {
+    fs22.lchmod = function(path2, mode, callback) {
+      fs22.open(
+        path2,
+        constants$2.O_WRONLY | constants$2.O_SYMLINK,
+        mode,
+        function(err, fd) {
+          if (err) {
+            if (callback) callback(err);
+            return;
+          }
+          fs22.fchmod(fd, mode, function(err2) {
+            fs22.close(fd, function(err22) {
+              if (callback) callback(err2 || err22);
+            });
+          });
+        }
+      );
+    };
+    fs22.lchmodSync = function(path2, mode) {
+      var fd = fs22.openSync(path2, constants$2.O_WRONLY | constants$2.O_SYMLINK, mode);
+      var threw = true;
+      var ret;
+      try {
+        ret = fs22.fchmodSync(fd, mode);
+        threw = false;
+      } finally {
+        if (threw) {
+          try {
+            fs22.closeSync(fd);
+          } catch (er) {
+          }
+        } else {
+          fs22.closeSync(fd);
+        }
+      }
+      return ret;
+    };
+  }
+  function patchLutimes(fs22) {
+    if (constants$2.hasOwnProperty("O_SYMLINK") && fs22.futimes) {
+      fs22.lutimes = function(path2, at, mt, cb) {
+        fs22.open(path2, constants$2.O_SYMLINK, function(er, fd) {
+          if (er) {
+            if (cb) cb(er);
+            return;
+          }
+          fs22.futimes(fd, at, mt, function(er2) {
+            fs22.close(fd, function(er22) {
+              if (cb) cb(er2 || er22);
+            });
+          });
+        });
+      };
+      fs22.lutimesSync = function(path2, at, mt) {
+        var fd = fs22.openSync(path2, constants$2.O_SYMLINK);
+        var ret;
+        var threw = true;
+        try {
+          ret = fs22.futimesSync(fd, at, mt);
+          threw = false;
+        } finally {
+          if (threw) {
+            try {
+              fs22.closeSync(fd);
+            } catch (er) {
+            }
+          } else {
+            fs22.closeSync(fd);
+          }
+        }
+        return ret;
+      };
+    } else if (fs22.futimes) {
+      fs22.lutimes = function(_a, _b, _c, cb) {
+        if (cb) process.nextTick(cb);
+      };
+      fs22.lutimesSync = function() {
+      };
+    }
+  }
+  function chmodFix(orig) {
+    if (!orig) return orig;
+    return function(target, mode, cb) {
+      return orig.call(fs2, target, mode, function(er) {
+        if (chownErOk(er)) er = null;
+        if (cb) cb.apply(this, arguments);
+      });
+    };
+  }
+  function chmodFixSync(orig) {
+    if (!orig) return orig;
+    return function(target, mode) {
+      try {
+        return orig.call(fs2, target, mode);
+      } catch (er) {
+        if (!chownErOk(er)) throw er;
+      }
+    };
+  }
+  function chownFix(orig) {
+    if (!orig) return orig;
+    return function(target, uid, gid, cb) {
+      return orig.call(fs2, target, uid, gid, function(er) {
+        if (chownErOk(er)) er = null;
+        if (cb) cb.apply(this, arguments);
+      });
+    };
+  }
+  function chownFixSync(orig) {
+    if (!orig) return orig;
+    return function(target, uid, gid) {
+      try {
+        return orig.call(fs2, target, uid, gid);
+      } catch (er) {
+        if (!chownErOk(er)) throw er;
+      }
+    };
+  }
+  function statFix(orig) {
+    if (!orig) return orig;
+    return function(target, options, cb) {
+      if (typeof options === "function") {
+        cb = options;
+        options = null;
+      }
+      function callback(er, stats) {
+        if (stats) {
+          if (stats.uid < 0) stats.uid += 4294967296;
+          if (stats.gid < 0) stats.gid += 4294967296;
+        }
+        if (cb) cb.apply(this, arguments);
+      }
+      return options ? orig.call(fs2, target, options, callback) : orig.call(fs2, target, callback);
+    };
+  }
+  function statFixSync(orig) {
+    if (!orig) return orig;
+    return function(target, options) {
+      var stats = options ? orig.call(fs2, target, options) : orig.call(fs2, target);
+      if (stats) {
+        if (stats.uid < 0) stats.uid += 4294967296;
+        if (stats.gid < 0) stats.gid += 4294967296;
+      }
+      return stats;
+    };
+  }
+  function chownErOk(er) {
+    if (!er)
+      return true;
+    if (er.code === "ENOSYS")
+      return true;
+    var nonroot = !process.getuid || process.getuid() !== 0;
+    if (nonroot) {
+      if (er.code === "EINVAL" || er.code === "EPERM")
+        return true;
+    }
+    return false;
+  }
+}
+var Stream = require$$0$1.Stream;
+var legacyStreams = legacy$1;
+function legacy$1(fs2) {
+  return {
+    ReadStream,
+    WriteStream
+  };
+  function ReadStream(path2, options) {
+    if (!(this instanceof ReadStream)) return new ReadStream(path2, options);
+    Stream.call(this);
+    var self2 = this;
+    this.path = path2;
+    this.fd = null;
+    this.readable = true;
+    this.paused = false;
+    this.flags = "r";
+    this.mode = 438;
+    this.bufferSize = 64 * 1024;
+    options = options || {};
+    var keys = Object.keys(options);
+    for (var index = 0, length = keys.length; index < length; index++) {
+      var key = keys[index];
+      this[key] = options[key];
+    }
+    if (this.encoding) this.setEncoding(this.encoding);
+    if (this.start !== void 0) {
+      if ("number" !== typeof this.start) {
+        throw TypeError("start must be a Number");
+      }
+      if (this.end === void 0) {
+        this.end = Infinity;
+      } else if ("number" !== typeof this.end) {
+        throw TypeError("end must be a Number");
+      }
+      if (this.start > this.end) {
+        throw new Error("start must be <= end");
+      }
+      this.pos = this.start;
+    }
+    if (this.fd !== null) {
+      process.nextTick(function() {
+        self2._read();
+      });
+      return;
+    }
+    fs2.open(this.path, this.flags, this.mode, function(err, fd) {
+      if (err) {
+        self2.emit("error", err);
+        self2.readable = false;
+        return;
+      }
+      self2.fd = fd;
+      self2.emit("open", fd);
+      self2._read();
+    });
+  }
+  function WriteStream(path2, options) {
+    if (!(this instanceof WriteStream)) return new WriteStream(path2, options);
+    Stream.call(this);
+    this.path = path2;
+    this.fd = null;
+    this.writable = true;
+    this.flags = "w";
+    this.encoding = "binary";
+    this.mode = 438;
+    this.bytesWritten = 0;
+    options = options || {};
+    var keys = Object.keys(options);
+    for (var index = 0, length = keys.length; index < length; index++) {
+      var key = keys[index];
+      this[key] = options[key];
+    }
+    if (this.start !== void 0) {
+      if ("number" !== typeof this.start) {
+        throw TypeError("start must be a Number");
+      }
+      if (this.start < 0) {
+        throw new Error("start must be >= zero");
+      }
+      this.pos = this.start;
+    }
+    this.busy = false;
+    this._queue = [];
+    if (this.fd === null) {
+      this._open = fs2.open;
+      this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
+      this.flush();
+    }
+  }
+}
+var clone_1 = clone$1;
+var getPrototypeOf = Object.getPrototypeOf || function(obj) {
+  return obj.__proto__;
+};
+function clone$1(obj) {
+  if (obj === null || typeof obj !== "object")
+    return obj;
+  if (obj instanceof Object)
+    var copy2 = { __proto__: getPrototypeOf(obj) };
+  else
+    var copy2 = /* @__PURE__ */ Object.create(null);
+  Object.getOwnPropertyNames(obj).forEach(function(key) {
+    Object.defineProperty(copy2, key, Object.getOwnPropertyDescriptor(obj, key));
+  });
+  return copy2;
+}
+var fs$h = require$$1;
+var polyfills = polyfills$1;
+var legacy = legacyStreams;
+var clone = clone_1;
+var util$2 = require$$4;
+var gracefulQueue;
+var previousSymbol;
+if (typeof Symbol === "function" && typeof Symbol.for === "function") {
+  gracefulQueue = Symbol.for("graceful-fs.queue");
+  previousSymbol = Symbol.for("graceful-fs.previous");
+} else {
+  gracefulQueue = "___graceful-fs.queue";
+  previousSymbol = "___graceful-fs.previous";
+}
+function noop() {
+}
+function publishQueue(context, queue2) {
+  Object.defineProperty(context, gracefulQueue, {
+    get: function() {
+      return queue2;
+    }
+  });
+}
+var debug$3 = noop;
+if (util$2.debuglog)
+  debug$3 = util$2.debuglog("gfs4");
+else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || ""))
+  debug$3 = function() {
+    var m = util$2.format.apply(util$2, arguments);
+    m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
+    console.error(m);
+  };
+if (!fs$h[gracefulQueue]) {
+  var queue = commonjsGlobal[gracefulQueue] || [];
+  publishQueue(fs$h, queue);
+  fs$h.close = function(fs$close) {
+    function close(fd, cb) {
+      return fs$close.call(fs$h, fd, function(err) {
+        if (!err) {
+          resetQueue();
+        }
+        if (typeof cb === "function")
+          cb.apply(this, arguments);
+      });
+    }
+    Object.defineProperty(close, previousSymbol, {
+      value: fs$close
+    });
+    return close;
+  }(fs$h.close);
+  fs$h.closeSync = function(fs$closeSync) {
+    function closeSync(fd) {
+      fs$closeSync.apply(fs$h, arguments);
+      resetQueue();
+    }
+    Object.defineProperty(closeSync, previousSymbol, {
+      value: fs$closeSync
+    });
+    return closeSync;
+  }(fs$h.closeSync);
+  if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
+    process.on("exit", function() {
+      debug$3(fs$h[gracefulQueue]);
+      require$$5.equal(fs$h[gracefulQueue].length, 0);
+    });
+  }
+}
+if (!commonjsGlobal[gracefulQueue]) {
+  publishQueue(commonjsGlobal, fs$h[gracefulQueue]);
+}
+var gracefulFs = patch$2(clone(fs$h));
+if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs$h.__patched) {
+  gracefulFs = patch$2(fs$h);
+  fs$h.__patched = true;
+}
+function patch$2(fs2) {
+  polyfills(fs2);
+  fs2.gracefulify = patch$2;
+  fs2.createReadStream = createReadStream;
+  fs2.createWriteStream = createWriteStream2;
+  var fs$readFile = fs2.readFile;
+  fs2.readFile = readFile2;
+  function readFile2(path2, options, cb) {
+    if (typeof options === "function")
+      cb = options, options = null;
+    return go$readFile(path2, options, cb);
+    function go$readFile(path22, options2, cb2, startTime) {
+      return fs$readFile(path22, options2, function(err) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([go$readFile, [path22, options2, cb2], err, startTime || Date.now(), Date.now()]);
+        else {
+          if (typeof cb2 === "function")
+            cb2.apply(this, arguments);
+        }
+      });
+    }
+  }
+  var fs$writeFile = fs2.writeFile;
+  fs2.writeFile = writeFile2;
+  function writeFile2(path2, data, options, cb) {
+    if (typeof options === "function")
+      cb = options, options = null;
+    return go$writeFile(path2, data, options, cb);
+    function go$writeFile(path22, data2, options2, cb2, startTime) {
+      return fs$writeFile(path22, data2, options2, function(err) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([go$writeFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+        else {
+          if (typeof cb2 === "function")
+            cb2.apply(this, arguments);
+        }
+      });
+    }
+  }
+  var fs$appendFile = fs2.appendFile;
+  if (fs$appendFile)
+    fs2.appendFile = appendFile;
+  function appendFile(path2, data, options, cb) {
+    if (typeof options === "function")
+      cb = options, options = null;
+    return go$appendFile(path2, data, options, cb);
+    function go$appendFile(path22, data2, options2, cb2, startTime) {
+      return fs$appendFile(path22, data2, options2, function(err) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([go$appendFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+        else {
+          if (typeof cb2 === "function")
+            cb2.apply(this, arguments);
+        }
+      });
+    }
+  }
+  var fs$copyFile = fs2.copyFile;
+  if (fs$copyFile)
+    fs2.copyFile = copyFile2;
+  function copyFile2(src2, dest, flags, cb) {
+    if (typeof flags === "function") {
+      cb = flags;
+      flags = 0;
+    }
+    return go$copyFile(src2, dest, flags, cb);
+    function go$copyFile(src22, dest2, flags2, cb2, startTime) {
+      return fs$copyFile(src22, dest2, flags2, function(err) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([go$copyFile, [src22, dest2, flags2, cb2], err, startTime || Date.now(), Date.now()]);
+        else {
+          if (typeof cb2 === "function")
+            cb2.apply(this, arguments);
+        }
+      });
+    }
+  }
+  var fs$readdir = fs2.readdir;
+  fs2.readdir = readdir;
+  var noReaddirOptionVersions = /^v[0-5]\./;
+  function readdir(path2, options, cb) {
+    if (typeof options === "function")
+      cb = options, options = null;
+    var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path22, options2, cb2, startTime) {
+      return fs$readdir(path22, fs$readdirCallback(
+        path22,
+        options2,
+        cb2,
+        startTime
+      ));
+    } : function go$readdir2(path22, options2, cb2, startTime) {
+      return fs$readdir(path22, options2, fs$readdirCallback(
+        path22,
+        options2,
+        cb2,
+        startTime
+      ));
+    };
+    return go$readdir(path2, options, cb);
+    function fs$readdirCallback(path22, options2, cb2, startTime) {
+      return function(err, files) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([
+            go$readdir,
+            [path22, options2, cb2],
+            err,
+            startTime || Date.now(),
+            Date.now()
+          ]);
+        else {
+          if (files && files.sort)
+            files.sort();
+          if (typeof cb2 === "function")
+            cb2.call(this, err, files);
+        }
+      };
+    }
+  }
+  if (process.version.substr(0, 4) === "v0.8") {
+    var legStreams = legacy(fs2);
+    ReadStream = legStreams.ReadStream;
+    WriteStream = legStreams.WriteStream;
+  }
+  var fs$ReadStream = fs2.ReadStream;
+  if (fs$ReadStream) {
+    ReadStream.prototype = Object.create(fs$ReadStream.prototype);
+    ReadStream.prototype.open = ReadStream$open;
+  }
+  var fs$WriteStream = fs2.WriteStream;
+  if (fs$WriteStream) {
+    WriteStream.prototype = Object.create(fs$WriteStream.prototype);
+    WriteStream.prototype.open = WriteStream$open;
+  }
+  Object.defineProperty(fs2, "ReadStream", {
+    get: function() {
+      return ReadStream;
+    },
+    set: function(val) {
+      ReadStream = val;
+    },
+    enumerable: true,
+    configurable: true
+  });
+  Object.defineProperty(fs2, "WriteStream", {
+    get: function() {
+      return WriteStream;
+    },
+    set: function(val) {
+      WriteStream = val;
+    },
+    enumerable: true,
+    configurable: true
+  });
+  var FileReadStream = ReadStream;
+  Object.defineProperty(fs2, "FileReadStream", {
+    get: function() {
+      return FileReadStream;
+    },
+    set: function(val) {
+      FileReadStream = val;
+    },
+    enumerable: true,
+    configurable: true
+  });
+  var FileWriteStream = WriteStream;
+  Object.defineProperty(fs2, "FileWriteStream", {
+    get: function() {
+      return FileWriteStream;
+    },
+    set: function(val) {
+      FileWriteStream = val;
+    },
+    enumerable: true,
+    configurable: true
+  });
+  function ReadStream(path2, options) {
+    if (this instanceof ReadStream)
+      return fs$ReadStream.apply(this, arguments), this;
+    else
+      return ReadStream.apply(Object.create(ReadStream.prototype), arguments);
+  }
+  function ReadStream$open() {
+    var that = this;
+    open(that.path, that.flags, that.mode, function(err, fd) {
+      if (err) {
+        if (that.autoClose)
+          that.destroy();
+        that.emit("error", err);
+      } else {
+        that.fd = fd;
+        that.emit("open", fd);
+        that.read();
+      }
+    });
+  }
+  function WriteStream(path2, options) {
+    if (this instanceof WriteStream)
+      return fs$WriteStream.apply(this, arguments), this;
+    else
+      return WriteStream.apply(Object.create(WriteStream.prototype), arguments);
+  }
+  function WriteStream$open() {
+    var that = this;
+    open(that.path, that.flags, that.mode, function(err, fd) {
+      if (err) {
+        that.destroy();
+        that.emit("error", err);
+      } else {
+        that.fd = fd;
+        that.emit("open", fd);
+      }
+    });
+  }
+  function createReadStream(path2, options) {
+    return new fs2.ReadStream(path2, options);
+  }
+  function createWriteStream2(path2, options) {
+    return new fs2.WriteStream(path2, options);
+  }
+  var fs$open = fs2.open;
+  fs2.open = open;
+  function open(path2, flags, mode, cb) {
+    if (typeof mode === "function")
+      cb = mode, mode = null;
+    return go$open(path2, flags, mode, cb);
+    function go$open(path22, flags2, mode2, cb2, startTime) {
+      return fs$open(path22, flags2, mode2, function(err, fd) {
+        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
+          enqueue([go$open, [path22, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+        else {
+          if (typeof cb2 === "function")
+            cb2.apply(this, arguments);
+        }
+      });
+    }
+  }
+  return fs2;
+}
+function enqueue(elem) {
+  debug$3("ENQUEUE", elem[0].name, elem[1]);
+  fs$h[gracefulQueue].push(elem);
+  retry$2();
+}
+var retryTimer;
+function resetQueue() {
+  var now = Date.now();
+  for (var i = 0; i < fs$h[gracefulQueue].length; ++i) {
+    if (fs$h[gracefulQueue][i].length > 2) {
+      fs$h[gracefulQueue][i][3] = now;
+      fs$h[gracefulQueue][i][4] = now;
+    }
+  }
+  retry$2();
+}
+function retry$2() {
+  clearTimeout(retryTimer);
+  retryTimer = void 0;
+  if (fs$h[gracefulQueue].length === 0)
+    return;
+  var elem = fs$h[gracefulQueue].shift();
+  var fn = elem[0];
+  var args = elem[1];
+  var err = elem[2];
+  var startTime = elem[3];
+  var lastTime = elem[4];
+  if (startTime === void 0) {
+    debug$3("RETRY", fn.name, args);
+    fn.apply(null, args);
+  } else if (Date.now() - startTime >= 6e4) {
+    debug$3("TIMEOUT", fn.name, args);
+    var cb = args.pop();
+    if (typeof cb === "function")
+      cb.call(null, err);
+  } else {
+    var sinceAttempt = Date.now() - lastTime;
+    var sinceStart = Math.max(lastTime - startTime, 1);
+    var desiredDelay = Math.min(sinceStart * 1.2, 100);
+    if (sinceAttempt >= desiredDelay) {
+      debug$3("RETRY", fn.name, args);
+      fn.apply(null, args.concat([startTime]));
+    } else {
+      fs$h[gracefulQueue].push(elem);
+    }
+  }
+  if (retryTimer === void 0) {
+    retryTimer = setTimeout(retry$2, 0);
+  }
+}
+(function(exports) {
+  const u2 = universalify$1.fromCallback;
+  const fs2 = gracefulFs;
+  const api = [
+    "access",
+    "appendFile",
+    "chmod",
+    "chown",
+    "close",
+    "copyFile",
+    "fchmod",
+    "fchown",
+    "fdatasync",
+    "fstat",
+    "fsync",
+    "ftruncate",
+    "futimes",
+    "lchmod",
+    "lchown",
+    "link",
+    "lstat",
+    "mkdir",
+    "mkdtemp",
+    "open",
+    "opendir",
+    "readdir",
+    "readFile",
+    "readlink",
+    "realpath",
+    "rename",
+    "rm",
+    "rmdir",
+    "stat",
+    "symlink",
+    "truncate",
+    "unlink",
+    "utimes",
+    "writeFile"
+  ].filter((key) => {
+    return typeof fs2[key] === "function";
+  });
+  Object.assign(exports, fs2);
+  api.forEach((method) => {
+    exports[method] = u2(fs2[method]);
+  });
+  exports.exists = function(filename, callback) {
+    if (typeof callback === "function") {
+      return fs2.exists(filename, callback);
+    }
+    return new Promise((resolve) => {
+      return fs2.exists(filename, resolve);
+    });
+  };
+  exports.read = function(fd, buffer, offset, length, position, callback) {
+    if (typeof callback === "function") {
+      return fs2.read(fd, buffer, offset, length, position, callback);
+    }
+    return new Promise((resolve, reject) => {
+      fs2.read(fd, buffer, offset, length, position, (err, bytesRead, buffer2) => {
+        if (err) return reject(err);
+        resolve({ bytesRead, buffer: buffer2 });
+      });
+    });
+  };
+  exports.write = function(fd, buffer, ...args) {
+    if (typeof args[args.length - 1] === "function") {
+      return fs2.write(fd, buffer, ...args);
+    }
+    return new Promise((resolve, reject) => {
+      fs2.write(fd, buffer, ...args, (err, bytesWritten, buffer2) => {
+        if (err) return reject(err);
+        resolve({ bytesWritten, buffer: buffer2 });
+      });
+    });
+  };
+  if (typeof fs2.writev === "function") {
+    exports.writev = function(fd, buffers, ...args) {
+      if (typeof args[args.length - 1] === "function") {
+        return fs2.writev(fd, buffers, ...args);
+      }
+      return new Promise((resolve, reject) => {
+        fs2.writev(fd, buffers, ...args, (err, bytesWritten, buffers2) => {
+          if (err) return reject(err);
+          resolve({ bytesWritten, buffers: buffers2 });
+        });
+      });
+    };
+  }
+  if (typeof fs2.realpath.native === "function") {
+    exports.realpath.native = u2(fs2.realpath.native);
+  } else {
+    process.emitWarning(
+      "fs.realpath.native is not a function. Is fs being monkey-patched?",
+      "Warning",
+      "fs-extra-WARN0003"
+    );
+  }
+})(fs$i);
+var makeDir$1 = {};
+var utils$1 = {};
+const path$l = require$$1$1;
+utils$1.checkPath = function checkPath(pth) {
+  if (process.platform === "win32") {
+    const pathHasInvalidWinCharacters = /[<>:"|?*]/.test(pth.replace(path$l.parse(pth).root, ""));
+    if (pathHasInvalidWinCharacters) {
+      const error2 = new Error(`Path contains invalid characters: ${pth}`);
+      error2.code = "EINVAL";
+      throw error2;
+    }
+  }
+};
+const fs$g = fs$i;
+const { checkPath: checkPath2 } = utils$1;
+const getMode = (options) => {
+  const defaults2 = { mode: 511 };
+  if (typeof options === "number") return options;
+  return { ...defaults2, ...options }.mode;
+};
+makeDir$1.makeDir = async (dir, options) => {
+  checkPath2(dir);
+  return fs$g.mkdir(dir, {
+    mode: getMode(options),
+    recursive: true
+  });
+};
+makeDir$1.makeDirSync = (dir, options) => {
+  checkPath2(dir);
+  return fs$g.mkdirSync(dir, {
+    mode: getMode(options),
+    recursive: true
+  });
+};
+const u$a = universalify$1.fromPromise;
+const { makeDir: _makeDir, makeDirSync } = makeDir$1;
+const makeDir = u$a(_makeDir);
+var mkdirs$2 = {
+  mkdirs: makeDir,
+  mkdirsSync: makeDirSync,
+  // alias
+  mkdirp: makeDir,
+  mkdirpSync: makeDirSync,
+  ensureDir: makeDir,
+  ensureDirSync: makeDirSync
+};
+const u$9 = universalify$1.fromPromise;
+const fs$f = fs$i;
+function pathExists$6(path2) {
+  return fs$f.access(path2).then(() => true).catch(() => false);
+}
+var pathExists_1 = {
+  pathExists: u$9(pathExists$6),
+  pathExistsSync: fs$f.existsSync
+};
+const fs$e = gracefulFs;
+function utimesMillis$1(path2, atime, mtime, callback) {
+  fs$e.open(path2, "r+", (err, fd) => {
+    if (err) return callback(err);
+    fs$e.futimes(fd, atime, mtime, (futimesErr) => {
+      fs$e.close(fd, (closeErr) => {
+        if (callback) callback(futimesErr || closeErr);
+      });
+    });
+  });
+}
+function utimesMillisSync$1(path2, atime, mtime) {
+  const fd = fs$e.openSync(path2, "r+");
+  fs$e.futimesSync(fd, atime, mtime);
+  return fs$e.closeSync(fd);
+}
+var utimes = {
+  utimesMillis: utimesMillis$1,
+  utimesMillisSync: utimesMillisSync$1
+};
+const fs$d = fs$i;
+const path$k = require$$1$1;
+const util$1 = require$$4;
+function getStats$2(src2, dest, opts) {
+  const statFunc = opts.dereference ? (file2) => fs$d.stat(file2, { bigint: true }) : (file2) => fs$d.lstat(file2, { bigint: true });
+  return Promise.all([
+    statFunc(src2),
+    statFunc(dest).catch((err) => {
+      if (err.code === "ENOENT") return null;
+      throw err;
+    })
+  ]).then(([srcStat, destStat]) => ({ srcStat, destStat }));
+}
+function getStatsSync(src2, dest, opts) {
+  let destStat;
+  const statFunc = opts.dereference ? (file2) => fs$d.statSync(file2, { bigint: true }) : (file2) => fs$d.lstatSync(file2, { bigint: true });
+  const srcStat = statFunc(src2);
+  try {
+    destStat = statFunc(dest);
+  } catch (err) {
+    if (err.code === "ENOENT") return { srcStat, destStat: null };
+    throw err;
+  }
+  return { srcStat, destStat };
+}
+function checkPaths(src2, dest, funcName, opts, cb) {
+  util$1.callbackify(getStats$2)(src2, dest, opts, (err, stats) => {
+    if (err) return cb(err);
+    const { srcStat, destStat } = stats;
+    if (destStat) {
+      if (areIdentical$2(srcStat, destStat)) {
+        const srcBaseName = path$k.basename(src2);
+        const destBaseName = path$k.basename(dest);
+        if (funcName === "move" && srcBaseName !== destBaseName && srcBaseName.toLowerCase() === destBaseName.toLowerCase()) {
+          return cb(null, { srcStat, destStat, isChangingCase: true });
+        }
+        return cb(new Error("Source and destination must not be the same."));
+      }
+      if (srcStat.isDirectory() && !destStat.isDirectory()) {
+        return cb(new Error(`Cannot overwrite non-directory '${dest}' with directory '${src2}'.`));
+      }
+      if (!srcStat.isDirectory() && destStat.isDirectory()) {
+        return cb(new Error(`Cannot overwrite directory '${dest}' with non-directory '${src2}'.`));
+      }
+    }
+    if (srcStat.isDirectory() && isSrcSubdir(src2, dest)) {
+      return cb(new Error(errMsg(src2, dest, funcName)));
+    }
+    return cb(null, { srcStat, destStat });
+  });
+}
+function checkPathsSync(src2, dest, funcName, opts) {
+  const { srcStat, destStat } = getStatsSync(src2, dest, opts);
+  if (destStat) {
+    if (areIdentical$2(srcStat, destStat)) {
+      const srcBaseName = path$k.basename(src2);
+      const destBaseName = path$k.basename(dest);
+      if (funcName === "move" && srcBaseName !== destBaseName && srcBaseName.toLowerCase() === destBaseName.toLowerCase()) {
+        return { srcStat, destStat, isChangingCase: true };
+      }
+      throw new Error("Source and destination must not be the same.");
+    }
+    if (srcStat.isDirectory() && !destStat.isDirectory()) {
+      throw new Error(`Cannot overwrite non-directory '${dest}' with directory '${src2}'.`);
+    }
+    if (!srcStat.isDirectory() && destStat.isDirectory()) {
+      throw new Error(`Cannot overwrite directory '${dest}' with non-directory '${src2}'.`);
+    }
+  }
+  if (srcStat.isDirectory() && isSrcSubdir(src2, dest)) {
+    throw new Error(errMsg(src2, dest, funcName));
+  }
+  return { srcStat, destStat };
+}
+function checkParentPaths(src2, srcStat, dest, funcName, cb) {
+  const srcParent = path$k.resolve(path$k.dirname(src2));
+  const destParent = path$k.resolve(path$k.dirname(dest));
+  if (destParent === srcParent || destParent === path$k.parse(destParent).root) return cb();
+  fs$d.stat(destParent, { bigint: true }, (err, destStat) => {
+    if (err) {
+      if (err.code === "ENOENT") return cb();
+      return cb(err);
+    }
+    if (areIdentical$2(srcStat, destStat)) {
+      return cb(new Error(errMsg(src2, dest, funcName)));
+    }
+    return checkParentPaths(src2, srcStat, destParent, funcName, cb);
+  });
+}
+function checkParentPathsSync(src2, srcStat, dest, funcName) {
+  const srcParent = path$k.resolve(path$k.dirname(src2));
+  const destParent = path$k.resolve(path$k.dirname(dest));
+  if (destParent === srcParent || destParent === path$k.parse(destParent).root) return;
+  let destStat;
+  try {
+    destStat = fs$d.statSync(destParent, { bigint: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  if (areIdentical$2(srcStat, destStat)) {
+    throw new Error(errMsg(src2, dest, funcName));
+  }
+  return checkParentPathsSync(src2, srcStat, destParent, funcName);
+}
+function areIdentical$2(srcStat, destStat) {
+  return destStat.ino && destStat.dev && destStat.ino === srcStat.ino && destStat.dev === srcStat.dev;
+}
+function isSrcSubdir(src2, dest) {
+  const srcArr = path$k.resolve(src2).split(path$k.sep).filter((i) => i);
+  const destArr = path$k.resolve(dest).split(path$k.sep).filter((i) => i);
+  return srcArr.reduce((acc, cur, i) => acc && destArr[i] === cur, true);
+}
+function errMsg(src2, dest, funcName) {
+  return `Cannot ${funcName} '${src2}' to a subdirectory of itself, '${dest}'.`;
+}
+var stat$4 = {
+  checkPaths,
+  checkPathsSync,
+  checkParentPaths,
+  checkParentPathsSync,
+  isSrcSubdir,
+  areIdentical: areIdentical$2
+};
+const fs$c = gracefulFs;
+const path$j = require$$1$1;
+const mkdirs$1 = mkdirs$2.mkdirs;
+const pathExists$5 = pathExists_1.pathExists;
+const utimesMillis = utimes.utimesMillis;
+const stat$3 = stat$4;
+function copy$2(src2, dest, opts, cb) {
+  if (typeof opts === "function" && !cb) {
+    cb = opts;
+    opts = {};
+  } else if (typeof opts === "function") {
+    opts = { filter: opts };
+  }
+  cb = cb || function() {
+  };
+  opts = opts || {};
+  opts.clobber = "clobber" in opts ? !!opts.clobber : true;
+  opts.overwrite = "overwrite" in opts ? !!opts.overwrite : opts.clobber;
+  if (opts.preserveTimestamps && process.arch === "ia32") {
+    process.emitWarning(
+      "Using the preserveTimestamps option in 32-bit node is not recommended;\n\n	see https://github.com/jprichardson/node-fs-extra/issues/269",
+      "Warning",
+      "fs-extra-WARN0001"
+    );
+  }
+  stat$3.checkPaths(src2, dest, "copy", opts, (err, stats) => {
+    if (err) return cb(err);
+    const { srcStat, destStat } = stats;
+    stat$3.checkParentPaths(src2, srcStat, dest, "copy", (err2) => {
+      if (err2) return cb(err2);
+      if (opts.filter) return handleFilter(checkParentDir, destStat, src2, dest, opts, cb);
+      return checkParentDir(destStat, src2, dest, opts, cb);
+    });
+  });
+}
+function checkParentDir(destStat, src2, dest, opts, cb) {
+  const destParent = path$j.dirname(dest);
+  pathExists$5(destParent, (err, dirExists) => {
+    if (err) return cb(err);
+    if (dirExists) return getStats$1(destStat, src2, dest, opts, cb);
+    mkdirs$1(destParent, (err2) => {
+      if (err2) return cb(err2);
+      return getStats$1(destStat, src2, dest, opts, cb);
+    });
+  });
+}
+function handleFilter(onInclude, destStat, src2, dest, opts, cb) {
+  Promise.resolve(opts.filter(src2, dest)).then((include) => {
+    if (include) return onInclude(destStat, src2, dest, opts, cb);
+    return cb();
+  }, (error2) => cb(error2));
+}
+function startCopy$1(destStat, src2, dest, opts, cb) {
+  if (opts.filter) return handleFilter(getStats$1, destStat, src2, dest, opts, cb);
+  return getStats$1(destStat, src2, dest, opts, cb);
+}
+function getStats$1(destStat, src2, dest, opts, cb) {
+  const stat2 = opts.dereference ? fs$c.stat : fs$c.lstat;
+  stat2(src2, (err, srcStat) => {
+    if (err) return cb(err);
+    if (srcStat.isDirectory()) return onDir$1(srcStat, destStat, src2, dest, opts, cb);
+    else if (srcStat.isFile() || srcStat.isCharacterDevice() || srcStat.isBlockDevice()) return onFile$1(srcStat, destStat, src2, dest, opts, cb);
+    else if (srcStat.isSymbolicLink()) return onLink$1(destStat, src2, dest, opts, cb);
+    else if (srcStat.isSocket()) return cb(new Error(`Cannot copy a socket file: ${src2}`));
+    else if (srcStat.isFIFO()) return cb(new Error(`Cannot copy a FIFO pipe: ${src2}`));
+    return cb(new Error(`Unknown file: ${src2}`));
+  });
+}
+function onFile$1(srcStat, destStat, src2, dest, opts, cb) {
+  if (!destStat) return copyFile$1(srcStat, src2, dest, opts, cb);
+  return mayCopyFile$1(srcStat, src2, dest, opts, cb);
+}
+function mayCopyFile$1(srcStat, src2, dest, opts, cb) {
+  if (opts.overwrite) {
+    fs$c.unlink(dest, (err) => {
+      if (err) return cb(err);
+      return copyFile$1(srcStat, src2, dest, opts, cb);
+    });
+  } else if (opts.errorOnExist) {
+    return cb(new Error(`'${dest}' already exists`));
+  } else return cb();
+}
+function copyFile$1(srcStat, src2, dest, opts, cb) {
+  fs$c.copyFile(src2, dest, (err) => {
+    if (err) return cb(err);
+    if (opts.preserveTimestamps) return handleTimestampsAndMode(srcStat.mode, src2, dest, cb);
+    return setDestMode$1(dest, srcStat.mode, cb);
+  });
+}
+function handleTimestampsAndMode(srcMode, src2, dest, cb) {
+  if (fileIsNotWritable$1(srcMode)) {
+    return makeFileWritable$1(dest, srcMode, (err) => {
+      if (err) return cb(err);
+      return setDestTimestampsAndMode(srcMode, src2, dest, cb);
+    });
+  }
+  return setDestTimestampsAndMode(srcMode, src2, dest, cb);
+}
+function fileIsNotWritable$1(srcMode) {
+  return (srcMode & 128) === 0;
+}
+function makeFileWritable$1(dest, srcMode, cb) {
+  return setDestMode$1(dest, srcMode | 128, cb);
+}
+function setDestTimestampsAndMode(srcMode, src2, dest, cb) {
+  setDestTimestamps$1(src2, dest, (err) => {
+    if (err) return cb(err);
+    return setDestMode$1(dest, srcMode, cb);
+  });
+}
+function setDestMode$1(dest, srcMode, cb) {
+  return fs$c.chmod(dest, srcMode, cb);
+}
+function setDestTimestamps$1(src2, dest, cb) {
+  fs$c.stat(src2, (err, updatedSrcStat) => {
+    if (err) return cb(err);
+    return utimesMillis(dest, updatedSrcStat.atime, updatedSrcStat.mtime, cb);
+  });
+}
+function onDir$1(srcStat, destStat, src2, dest, opts, cb) {
+  if (!destStat) return mkDirAndCopy$1(srcStat.mode, src2, dest, opts, cb);
+  return copyDir$1(src2, dest, opts, cb);
+}
+function mkDirAndCopy$1(srcMode, src2, dest, opts, cb) {
+  fs$c.mkdir(dest, (err) => {
+    if (err) return cb(err);
+    copyDir$1(src2, dest, opts, (err2) => {
+      if (err2) return cb(err2);
+      return setDestMode$1(dest, srcMode, cb);
+    });
+  });
+}
+function copyDir$1(src2, dest, opts, cb) {
+  fs$c.readdir(src2, (err, items) => {
+    if (err) return cb(err);
+    return copyDirItems(items, src2, dest, opts, cb);
+  });
+}
+function copyDirItems(items, src2, dest, opts, cb) {
+  const item = items.pop();
+  if (!item) return cb();
+  return copyDirItem$1(items, item, src2, dest, opts, cb);
+}
+function copyDirItem$1(items, item, src2, dest, opts, cb) {
+  const srcItem = path$j.join(src2, item);
+  const destItem = path$j.join(dest, item);
+  stat$3.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
+    if (err) return cb(err);
+    const { destStat } = stats;
+    startCopy$1(destStat, srcItem, destItem, opts, (err2) => {
+      if (err2) return cb(err2);
+      return copyDirItems(items, src2, dest, opts, cb);
+    });
+  });
+}
+function onLink$1(destStat, src2, dest, opts, cb) {
+  fs$c.readlink(src2, (err, resolvedSrc) => {
+    if (err) return cb(err);
+    if (opts.dereference) {
+      resolvedSrc = path$j.resolve(process.cwd(), resolvedSrc);
+    }
+    if (!destStat) {
+      return fs$c.symlink(resolvedSrc, dest, cb);
+    } else {
+      fs$c.readlink(dest, (err2, resolvedDest) => {
+        if (err2) {
+          if (err2.code === "EINVAL" || err2.code === "UNKNOWN") return fs$c.symlink(resolvedSrc, dest, cb);
+          return cb(err2);
+        }
+        if (opts.dereference) {
+          resolvedDest = path$j.resolve(process.cwd(), resolvedDest);
+        }
+        if (stat$3.isSrcSubdir(resolvedSrc, resolvedDest)) {
+          return cb(new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`));
+        }
+        if (destStat.isDirectory() && stat$3.isSrcSubdir(resolvedDest, resolvedSrc)) {
+          return cb(new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`));
+        }
+        return copyLink$1(resolvedSrc, dest, cb);
+      });
+    }
+  });
+}
+function copyLink$1(resolvedSrc, dest, cb) {
+  fs$c.unlink(dest, (err) => {
+    if (err) return cb(err);
+    return fs$c.symlink(resolvedSrc, dest, cb);
+  });
+}
+var copy_1 = copy$2;
+const fs$b = gracefulFs;
+const path$i = require$$1$1;
+const mkdirsSync$1 = mkdirs$2.mkdirsSync;
+const utimesMillisSync = utimes.utimesMillisSync;
+const stat$2 = stat$4;
+function copySync$1(src2, dest, opts) {
+  if (typeof opts === "function") {
+    opts = { filter: opts };
+  }
+  opts = opts || {};
+  opts.clobber = "clobber" in opts ? !!opts.clobber : true;
+  opts.overwrite = "overwrite" in opts ? !!opts.overwrite : opts.clobber;
+  if (opts.preserveTimestamps && process.arch === "ia32") {
+    process.emitWarning(
+      "Using the preserveTimestamps option in 32-bit node is not recommended;\n\n	see https://github.com/jprichardson/node-fs-extra/issues/269",
+      "Warning",
+      "fs-extra-WARN0002"
+    );
+  }
+  const { srcStat, destStat } = stat$2.checkPathsSync(src2, dest, "copy", opts);
+  stat$2.checkParentPathsSync(src2, srcStat, dest, "copy");
+  return handleFilterAndCopy(destStat, src2, dest, opts);
+}
+function handleFilterAndCopy(destStat, src2, dest, opts) {
+  if (opts.filter && !opts.filter(src2, dest)) return;
+  const destParent = path$i.dirname(dest);
+  if (!fs$b.existsSync(destParent)) mkdirsSync$1(destParent);
+  return getStats(destStat, src2, dest, opts);
+}
+function startCopy(destStat, src2, dest, opts) {
+  if (opts.filter && !opts.filter(src2, dest)) return;
+  return getStats(destStat, src2, dest, opts);
+}
+function getStats(destStat, src2, dest, opts) {
+  const statSync = opts.dereference ? fs$b.statSync : fs$b.lstatSync;
+  const srcStat = statSync(src2);
+  if (srcStat.isDirectory()) return onDir(srcStat, destStat, src2, dest, opts);
+  else if (srcStat.isFile() || srcStat.isCharacterDevice() || srcStat.isBlockDevice()) return onFile(srcStat, destStat, src2, dest, opts);
+  else if (srcStat.isSymbolicLink()) return onLink(destStat, src2, dest, opts);
+  else if (srcStat.isSocket()) throw new Error(`Cannot copy a socket file: ${src2}`);
+  else if (srcStat.isFIFO()) throw new Error(`Cannot copy a FIFO pipe: ${src2}`);
+  throw new Error(`Unknown file: ${src2}`);
+}
+function onFile(srcStat, destStat, src2, dest, opts) {
+  if (!destStat) return copyFile(srcStat, src2, dest, opts);
+  return mayCopyFile(srcStat, src2, dest, opts);
+}
+function mayCopyFile(srcStat, src2, dest, opts) {
+  if (opts.overwrite) {
+    fs$b.unlinkSync(dest);
+    return copyFile(srcStat, src2, dest, opts);
+  } else if (opts.errorOnExist) {
+    throw new Error(`'${dest}' already exists`);
+  }
+}
+function copyFile(srcStat, src2, dest, opts) {
+  fs$b.copyFileSync(src2, dest);
+  if (opts.preserveTimestamps) handleTimestamps(srcStat.mode, src2, dest);
+  return setDestMode(dest, srcStat.mode);
+}
+function handleTimestamps(srcMode, src2, dest) {
+  if (fileIsNotWritable(srcMode)) makeFileWritable(dest, srcMode);
+  return setDestTimestamps(src2, dest);
+}
+function fileIsNotWritable(srcMode) {
+  return (srcMode & 128) === 0;
+}
+function makeFileWritable(dest, srcMode) {
+  return setDestMode(dest, srcMode | 128);
+}
+function setDestMode(dest, srcMode) {
+  return fs$b.chmodSync(dest, srcMode);
+}
+function setDestTimestamps(src2, dest) {
+  const updatedSrcStat = fs$b.statSync(src2);
+  return utimesMillisSync(dest, updatedSrcStat.atime, updatedSrcStat.mtime);
+}
+function onDir(srcStat, destStat, src2, dest, opts) {
+  if (!destStat) return mkDirAndCopy(srcStat.mode, src2, dest, opts);
+  return copyDir(src2, dest, opts);
+}
+function mkDirAndCopy(srcMode, src2, dest, opts) {
+  fs$b.mkdirSync(dest);
+  copyDir(src2, dest, opts);
+  return setDestMode(dest, srcMode);
+}
+function copyDir(src2, dest, opts) {
+  fs$b.readdirSync(src2).forEach((item) => copyDirItem(item, src2, dest, opts));
+}
+function copyDirItem(item, src2, dest, opts) {
+  const srcItem = path$i.join(src2, item);
+  const destItem = path$i.join(dest, item);
+  const { destStat } = stat$2.checkPathsSync(srcItem, destItem, "copy", opts);
+  return startCopy(destStat, srcItem, destItem, opts);
+}
+function onLink(destStat, src2, dest, opts) {
+  let resolvedSrc = fs$b.readlinkSync(src2);
+  if (opts.dereference) {
+    resolvedSrc = path$i.resolve(process.cwd(), resolvedSrc);
+  }
+  if (!destStat) {
+    return fs$b.symlinkSync(resolvedSrc, dest);
+  } else {
+    let resolvedDest;
+    try {
+      resolvedDest = fs$b.readlinkSync(dest);
+    } catch (err) {
+      if (err.code === "EINVAL" || err.code === "UNKNOWN") return fs$b.symlinkSync(resolvedSrc, dest);
+      throw err;
+    }
+    if (opts.dereference) {
+      resolvedDest = path$i.resolve(process.cwd(), resolvedDest);
+    }
+    if (stat$2.isSrcSubdir(resolvedSrc, resolvedDest)) {
+      throw new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`);
+    }
+    if (fs$b.statSync(dest).isDirectory() && stat$2.isSrcSubdir(resolvedDest, resolvedSrc)) {
+      throw new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`);
+    }
+    return copyLink(resolvedSrc, dest);
+  }
+}
+function copyLink(resolvedSrc, dest) {
+  fs$b.unlinkSync(dest);
+  return fs$b.symlinkSync(resolvedSrc, dest);
+}
+var copySync_1 = copySync$1;
+const u$8 = universalify$1.fromCallback;
+var copy$1 = {
+  copy: u$8(copy_1),
+  copySync: copySync_1
+};
+const fs$a = gracefulFs;
+const path$h = require$$1$1;
+const assert = require$$5;
+const isWindows = process.platform === "win32";
+function defaults(options) {
+  const methods = [
+    "unlink",
+    "chmod",
+    "stat",
+    "lstat",
+    "rmdir",
+    "readdir"
+  ];
+  methods.forEach((m) => {
+    options[m] = options[m] || fs$a[m];
+    m = m + "Sync";
+    options[m] = options[m] || fs$a[m];
+  });
+  options.maxBusyTries = options.maxBusyTries || 3;
+}
+function rimraf$1(p, options, cb) {
+  let busyTries = 0;
+  if (typeof options === "function") {
+    cb = options;
+    options = {};
+  }
+  assert(p, "rimraf: missing path");
+  assert.strictEqual(typeof p, "string", "rimraf: path should be a string");
+  assert.strictEqual(typeof cb, "function", "rimraf: callback function required");
+  assert(options, "rimraf: invalid options argument provided");
+  assert.strictEqual(typeof options, "object", "rimraf: options should be object");
+  defaults(options);
+  rimraf_(p, options, function CB(er) {
+    if (er) {
+      if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") && busyTries < options.maxBusyTries) {
+        busyTries++;
+        const time = busyTries * 100;
+        return setTimeout(() => rimraf_(p, options, CB), time);
+      }
+      if (er.code === "ENOENT") er = null;
+    }
+    cb(er);
+  });
+}
+function rimraf_(p, options, cb) {
+  assert(p);
+  assert(options);
+  assert(typeof cb === "function");
+  options.lstat(p, (er, st) => {
+    if (er && er.code === "ENOENT") {
+      return cb(null);
+    }
+    if (er && er.code === "EPERM" && isWindows) {
+      return fixWinEPERM(p, options, er, cb);
+    }
+    if (st && st.isDirectory()) {
+      return rmdir(p, options, er, cb);
+    }
+    options.unlink(p, (er2) => {
+      if (er2) {
+        if (er2.code === "ENOENT") {
+          return cb(null);
+        }
+        if (er2.code === "EPERM") {
+          return isWindows ? fixWinEPERM(p, options, er2, cb) : rmdir(p, options, er2, cb);
+        }
+        if (er2.code === "EISDIR") {
+          return rmdir(p, options, er2, cb);
+        }
+      }
+      return cb(er2);
+    });
+  });
+}
+function fixWinEPERM(p, options, er, cb) {
+  assert(p);
+  assert(options);
+  assert(typeof cb === "function");
+  options.chmod(p, 438, (er2) => {
+    if (er2) {
+      cb(er2.code === "ENOENT" ? null : er);
+    } else {
+      options.stat(p, (er3, stats) => {
+        if (er3) {
+          cb(er3.code === "ENOENT" ? null : er);
+        } else if (stats.isDirectory()) {
+          rmdir(p, options, er, cb);
+        } else {
+          options.unlink(p, cb);
+        }
+      });
+    }
+  });
+}
+function fixWinEPERMSync(p, options, er) {
+  let stats;
+  assert(p);
+  assert(options);
+  try {
+    options.chmodSync(p, 438);
+  } catch (er2) {
+    if (er2.code === "ENOENT") {
+      return;
+    } else {
+      throw er;
+    }
+  }
+  try {
+    stats = options.statSync(p);
+  } catch (er3) {
+    if (er3.code === "ENOENT") {
+      return;
+    } else {
+      throw er;
+    }
+  }
+  if (stats.isDirectory()) {
+    rmdirSync(p, options, er);
+  } else {
+    options.unlinkSync(p);
+  }
+}
+function rmdir(p, options, originalEr, cb) {
+  assert(p);
+  assert(options);
+  assert(typeof cb === "function");
+  options.rmdir(p, (er) => {
+    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")) {
+      rmkids(p, options, cb);
+    } else if (er && er.code === "ENOTDIR") {
+      cb(originalEr);
+    } else {
+      cb(er);
+    }
+  });
+}
+function rmkids(p, options, cb) {
+  assert(p);
+  assert(options);
+  assert(typeof cb === "function");
+  options.readdir(p, (er, files) => {
+    if (er) return cb(er);
+    let n = files.length;
+    let errState;
+    if (n === 0) return options.rmdir(p, cb);
+    files.forEach((f) => {
+      rimraf$1(path$h.join(p, f), options, (er2) => {
+        if (errState) {
+          return;
+        }
+        if (er2) return cb(errState = er2);
+        if (--n === 0) {
+          options.rmdir(p, cb);
+        }
+      });
+    });
+  });
+}
+function rimrafSync(p, options) {
+  let st;
+  options = options || {};
+  defaults(options);
+  assert(p, "rimraf: missing path");
+  assert.strictEqual(typeof p, "string", "rimraf: path should be a string");
+  assert(options, "rimraf: missing options");
+  assert.strictEqual(typeof options, "object", "rimraf: options should be object");
+  try {
+    st = options.lstatSync(p);
+  } catch (er) {
+    if (er.code === "ENOENT") {
+      return;
+    }
+    if (er.code === "EPERM" && isWindows) {
+      fixWinEPERMSync(p, options, er);
+    }
+  }
+  try {
+    if (st && st.isDirectory()) {
+      rmdirSync(p, options, null);
+    } else {
+      options.unlinkSync(p);
+    }
+  } catch (er) {
+    if (er.code === "ENOENT") {
+      return;
+    } else if (er.code === "EPERM") {
+      return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er);
+    } else if (er.code !== "EISDIR") {
+      throw er;
+    }
+    rmdirSync(p, options, er);
+  }
+}
+function rmdirSync(p, options, originalEr) {
+  assert(p);
+  assert(options);
+  try {
+    options.rmdirSync(p);
+  } catch (er) {
+    if (er.code === "ENOTDIR") {
+      throw originalEr;
+    } else if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM") {
+      rmkidsSync(p, options);
+    } else if (er.code !== "ENOENT") {
+      throw er;
+    }
+  }
+}
+function rmkidsSync(p, options) {
+  assert(p);
+  assert(options);
+  options.readdirSync(p).forEach((f) => rimrafSync(path$h.join(p, f), options));
+  if (isWindows) {
+    const startTime = Date.now();
+    do {
+      try {
+        const ret = options.rmdirSync(p, options);
+        return ret;
+      } catch {
+      }
+    } while (Date.now() - startTime < 500);
+  } else {
+    const ret = options.rmdirSync(p, options);
+    return ret;
+  }
+}
+var rimraf_1 = rimraf$1;
+rimraf$1.sync = rimrafSync;
+const fs$9 = gracefulFs;
+const u$7 = universalify$1.fromCallback;
+const rimraf = rimraf_1;
+function remove$2(path2, callback) {
+  if (fs$9.rm) return fs$9.rm(path2, { recursive: true, force: true }, callback);
+  rimraf(path2, callback);
+}
+function removeSync$1(path2) {
+  if (fs$9.rmSync) return fs$9.rmSync(path2, { recursive: true, force: true });
+  rimraf.sync(path2);
+}
+var remove_1 = {
+  remove: u$7(remove$2),
+  removeSync: removeSync$1
+};
+const u$6 = universalify$1.fromPromise;
+const fs$8 = fs$i;
+const path$g = require$$1$1;
+const mkdir$3 = mkdirs$2;
+const remove$1 = remove_1;
+const emptyDir = u$6(async function emptyDir2(dir) {
+  let items;
+  try {
+    items = await fs$8.readdir(dir);
+  } catch {
+    return mkdir$3.mkdirs(dir);
+  }
+  return Promise.all(items.map((item) => remove$1.remove(path$g.join(dir, item))));
+});
+function emptyDirSync(dir) {
+  let items;
+  try {
+    items = fs$8.readdirSync(dir);
+  } catch {
+    return mkdir$3.mkdirsSync(dir);
+  }
+  items.forEach((item) => {
+    item = path$g.join(dir, item);
+    remove$1.removeSync(item);
+  });
+}
+var empty = {
+  emptyDirSync,
+  emptydirSync: emptyDirSync,
+  emptyDir,
+  emptydir: emptyDir
+};
+const u$5 = universalify$1.fromCallback;
+const path$f = require$$1$1;
+const fs$7 = gracefulFs;
+const mkdir$2 = mkdirs$2;
+function createFile$1(file2, callback) {
+  function makeFile() {
+    fs$7.writeFile(file2, "", (err) => {
+      if (err) return callback(err);
+      callback();
+    });
+  }
+  fs$7.stat(file2, (err, stats) => {
+    if (!err && stats.isFile()) return callback();
+    const dir = path$f.dirname(file2);
+    fs$7.stat(dir, (err2, stats2) => {
+      if (err2) {
+        if (err2.code === "ENOENT") {
+          return mkdir$2.mkdirs(dir, (err3) => {
+            if (err3) return callback(err3);
+            makeFile();
+          });
+        }
+        return callback(err2);
+      }
+      if (stats2.isDirectory()) makeFile();
+      else {
+        fs$7.readdir(dir, (err3) => {
+          if (err3) return callback(err3);
+        });
+      }
+    });
+  });
+}
+function createFileSync$1(file2) {
+  let stats;
+  try {
+    stats = fs$7.statSync(file2);
+  } catch {
+  }
+  if (stats && stats.isFile()) return;
+  const dir = path$f.dirname(file2);
+  try {
+    if (!fs$7.statSync(dir).isDirectory()) {
+      fs$7.readdirSync(dir);
+    }
+  } catch (err) {
+    if (err && err.code === "ENOENT") mkdir$2.mkdirsSync(dir);
+    else throw err;
+  }
+  fs$7.writeFileSync(file2, "");
+}
+var file = {
+  createFile: u$5(createFile$1),
+  createFileSync: createFileSync$1
+};
+const u$4 = universalify$1.fromCallback;
+const path$e = require$$1$1;
+const fs$6 = gracefulFs;
+const mkdir$1 = mkdirs$2;
+const pathExists$4 = pathExists_1.pathExists;
+const { areIdentical: areIdentical$1 } = stat$4;
+function createLink$1(srcpath, dstpath, callback) {
+  function makeLink(srcpath2, dstpath2) {
+    fs$6.link(srcpath2, dstpath2, (err) => {
+      if (err) return callback(err);
+      callback(null);
+    });
+  }
+  fs$6.lstat(dstpath, (_, dstStat) => {
+    fs$6.lstat(srcpath, (err, srcStat) => {
+      if (err) {
+        err.message = err.message.replace("lstat", "ensureLink");
+        return callback(err);
+      }
+      if (dstStat && areIdentical$1(srcStat, dstStat)) return callback(null);
+      const dir = path$e.dirname(dstpath);
+      pathExists$4(dir, (err2, dirExists) => {
+        if (err2) return callback(err2);
+        if (dirExists) return makeLink(srcpath, dstpath);
+        mkdir$1.mkdirs(dir, (err3) => {
+          if (err3) return callback(err3);
+          makeLink(srcpath, dstpath);
+        });
+      });
+    });
+  });
+}
+function createLinkSync$1(srcpath, dstpath) {
+  let dstStat;
+  try {
+    dstStat = fs$6.lstatSync(dstpath);
+  } catch {
+  }
+  try {
+    const srcStat = fs$6.lstatSync(srcpath);
+    if (dstStat && areIdentical$1(srcStat, dstStat)) return;
+  } catch (err) {
+    err.message = err.message.replace("lstat", "ensureLink");
+    throw err;
+  }
+  const dir = path$e.dirname(dstpath);
+  const dirExists = fs$6.existsSync(dir);
+  if (dirExists) return fs$6.linkSync(srcpath, dstpath);
+  mkdir$1.mkdirsSync(dir);
+  return fs$6.linkSync(srcpath, dstpath);
+}
+var link = {
+  createLink: u$4(createLink$1),
+  createLinkSync: createLinkSync$1
+};
+const path$d = require$$1$1;
+const fs$5 = gracefulFs;
+const pathExists$3 = pathExists_1.pathExists;
+function symlinkPaths$1(srcpath, dstpath, callback) {
+  if (path$d.isAbsolute(srcpath)) {
+    return fs$5.lstat(srcpath, (err) => {
+      if (err) {
+        err.message = err.message.replace("lstat", "ensureSymlink");
+        return callback(err);
+      }
+      return callback(null, {
+        toCwd: srcpath,
+        toDst: srcpath
+      });
+    });
+  } else {
+    const dstdir = path$d.dirname(dstpath);
+    const relativeToDst = path$d.join(dstdir, srcpath);
+    return pathExists$3(relativeToDst, (err, exists) => {
+      if (err) return callback(err);
+      if (exists) {
+        return callback(null, {
+          toCwd: relativeToDst,
+          toDst: srcpath
+        });
+      } else {
+        return fs$5.lstat(srcpath, (err2) => {
+          if (err2) {
+            err2.message = err2.message.replace("lstat", "ensureSymlink");
+            return callback(err2);
+          }
+          return callback(null, {
+            toCwd: srcpath,
+            toDst: path$d.relative(dstdir, srcpath)
+          });
+        });
+      }
+    });
+  }
+}
+function symlinkPathsSync$1(srcpath, dstpath) {
+  let exists;
+  if (path$d.isAbsolute(srcpath)) {
+    exists = fs$5.existsSync(srcpath);
+    if (!exists) throw new Error("absolute srcpath does not exist");
+    return {
+      toCwd: srcpath,
+      toDst: srcpath
+    };
+  } else {
+    const dstdir = path$d.dirname(dstpath);
+    const relativeToDst = path$d.join(dstdir, srcpath);
+    exists = fs$5.existsSync(relativeToDst);
+    if (exists) {
+      return {
+        toCwd: relativeToDst,
+        toDst: srcpath
+      };
+    } else {
+      exists = fs$5.existsSync(srcpath);
+      if (!exists) throw new Error("relative srcpath does not exist");
+      return {
+        toCwd: srcpath,
+        toDst: path$d.relative(dstdir, srcpath)
+      };
+    }
+  }
+}
+var symlinkPaths_1 = {
+  symlinkPaths: symlinkPaths$1,
+  symlinkPathsSync: symlinkPathsSync$1
+};
+const fs$4 = gracefulFs;
+function symlinkType$1(srcpath, type2, callback) {
+  callback = typeof type2 === "function" ? type2 : callback;
+  type2 = typeof type2 === "function" ? false : type2;
+  if (type2) return callback(null, type2);
+  fs$4.lstat(srcpath, (err, stats) => {
+    if (err) return callback(null, "file");
+    type2 = stats && stats.isDirectory() ? "dir" : "file";
+    callback(null, type2);
+  });
+}
+function symlinkTypeSync$1(srcpath, type2) {
+  let stats;
+  if (type2) return type2;
+  try {
+    stats = fs$4.lstatSync(srcpath);
+  } catch {
+    return "file";
+  }
+  return stats && stats.isDirectory() ? "dir" : "file";
+}
+var symlinkType_1 = {
+  symlinkType: symlinkType$1,
+  symlinkTypeSync: symlinkTypeSync$1
+};
+const u$3 = universalify$1.fromCallback;
+const path$c = require$$1$1;
+const fs$3 = fs$i;
+const _mkdirs = mkdirs$2;
+const mkdirs = _mkdirs.mkdirs;
+const mkdirsSync = _mkdirs.mkdirsSync;
+const _symlinkPaths = symlinkPaths_1;
+const symlinkPaths = _symlinkPaths.symlinkPaths;
+const symlinkPathsSync = _symlinkPaths.symlinkPathsSync;
+const _symlinkType = symlinkType_1;
+const symlinkType = _symlinkType.symlinkType;
+const symlinkTypeSync = _symlinkType.symlinkTypeSync;
+const pathExists$2 = pathExists_1.pathExists;
+const { areIdentical } = stat$4;
+function createSymlink$1(srcpath, dstpath, type2, callback) {
+  callback = typeof type2 === "function" ? type2 : callback;
+  type2 = typeof type2 === "function" ? false : type2;
+  fs$3.lstat(dstpath, (err, stats) => {
+    if (!err && stats.isSymbolicLink()) {
+      Promise.all([
+        fs$3.stat(srcpath),
+        fs$3.stat(dstpath)
+      ]).then(([srcStat, dstStat]) => {
+        if (areIdentical(srcStat, dstStat)) return callback(null);
+        _createSymlink(srcpath, dstpath, type2, callback);
+      });
+    } else _createSymlink(srcpath, dstpath, type2, callback);
+  });
+}
+function _createSymlink(srcpath, dstpath, type2, callback) {
+  symlinkPaths(srcpath, dstpath, (err, relative) => {
+    if (err) return callback(err);
+    srcpath = relative.toDst;
+    symlinkType(relative.toCwd, type2, (err2, type3) => {
+      if (err2) return callback(err2);
+      const dir = path$c.dirname(dstpath);
+      pathExists$2(dir, (err3, dirExists) => {
+        if (err3) return callback(err3);
+        if (dirExists) return fs$3.symlink(srcpath, dstpath, type3, callback);
+        mkdirs(dir, (err4) => {
+          if (err4) return callback(err4);
+          fs$3.symlink(srcpath, dstpath, type3, callback);
+        });
+      });
+    });
+  });
+}
+function createSymlinkSync$1(srcpath, dstpath, type2) {
+  let stats;
+  try {
+    stats = fs$3.lstatSync(dstpath);
+  } catch {
+  }
+  if (stats && stats.isSymbolicLink()) {
+    const srcStat = fs$3.statSync(srcpath);
+    const dstStat = fs$3.statSync(dstpath);
+    if (areIdentical(srcStat, dstStat)) return;
+  }
+  const relative = symlinkPathsSync(srcpath, dstpath);
+  srcpath = relative.toDst;
+  type2 = symlinkTypeSync(relative.toCwd, type2);
+  const dir = path$c.dirname(dstpath);
+  const exists = fs$3.existsSync(dir);
+  if (exists) return fs$3.symlinkSync(srcpath, dstpath, type2);
+  mkdirsSync(dir);
+  return fs$3.symlinkSync(srcpath, dstpath, type2);
+}
+var symlink = {
+  createSymlink: u$3(createSymlink$1),
+  createSymlinkSync: createSymlinkSync$1
+};
+const { createFile, createFileSync } = file;
+const { createLink, createLinkSync } = link;
+const { createSymlink, createSymlinkSync } = symlink;
+var ensure = {
+  // file
+  createFile,
+  createFileSync,
+  ensureFile: createFile,
+  ensureFileSync: createFileSync,
+  // link
+  createLink,
+  createLinkSync,
+  ensureLink: createLink,
+  ensureLinkSync: createLinkSync,
+  // symlink
+  createSymlink,
+  createSymlinkSync,
+  ensureSymlink: createSymlink,
+  ensureSymlinkSync: createSymlinkSync
+};
+function stringify$4(obj, { EOL = "\n", finalEOL = true, replacer = null, spaces } = {}) {
+  const EOF = finalEOL ? EOL : "";
+  const str2 = JSON.stringify(obj, replacer, spaces);
+  return str2.replace(/\n/g, EOL) + EOF;
+}
+function stripBom$1(content) {
+  if (Buffer.isBuffer(content)) content = content.toString("utf8");
+  return content.replace(/^\uFEFF/, "");
+}
+var utils = { stringify: stringify$4, stripBom: stripBom$1 };
+let _fs;
+try {
+  _fs = gracefulFs;
+} catch (_) {
+  _fs = require$$1;
+}
+const universalify = universalify$1;
+const { stringify: stringify$3, stripBom } = utils;
+async function _readFile(file2, options = {}) {
+  if (typeof options === "string") {
+    options = { encoding: options };
+  }
+  const fs2 = options.fs || _fs;
+  const shouldThrow = "throws" in options ? options.throws : true;
+  let data = await universalify.fromCallback(fs2.readFile)(file2, options);
+  data = stripBom(data);
+  let obj;
+  try {
+    obj = JSON.parse(data, options ? options.reviver : null);
+  } catch (err) {
+    if (shouldThrow) {
+      err.message = `${file2}: ${err.message}`;
+      throw err;
+    } else {
+      return null;
+    }
+  }
+  return obj;
+}
+const readFile = universalify.fromPromise(_readFile);
+function readFileSync(file2, options = {}) {
+  if (typeof options === "string") {
+    options = { encoding: options };
+  }
+  const fs2 = options.fs || _fs;
+  const shouldThrow = "throws" in options ? options.throws : true;
+  try {
+    let content = fs2.readFileSync(file2, options);
+    content = stripBom(content);
+    return JSON.parse(content, options.reviver);
+  } catch (err) {
+    if (shouldThrow) {
+      err.message = `${file2}: ${err.message}`;
+      throw err;
+    } else {
+      return null;
+    }
+  }
+}
+async function _writeFile(file2, obj, options = {}) {
+  const fs2 = options.fs || _fs;
+  const str2 = stringify$3(obj, options);
+  await universalify.fromCallback(fs2.writeFile)(file2, str2, options);
+}
+const writeFile = universalify.fromPromise(_writeFile);
+function writeFileSync(file2, obj, options = {}) {
+  const fs2 = options.fs || _fs;
+  const str2 = stringify$3(obj, options);
+  return fs2.writeFileSync(file2, str2, options);
+}
+const jsonfile$1 = {
+  readFile,
+  readFileSync,
+  writeFile,
+  writeFileSync
+};
+var jsonfile_1 = jsonfile$1;
+const jsonFile$1 = jsonfile_1;
+var jsonfile = {
+  // jsonfile exports
+  readJson: jsonFile$1.readFile,
+  readJsonSync: jsonFile$1.readFileSync,
+  writeJson: jsonFile$1.writeFile,
+  writeJsonSync: jsonFile$1.writeFileSync
+};
+const u$2 = universalify$1.fromCallback;
+const fs$2 = gracefulFs;
+const path$b = require$$1$1;
+const mkdir = mkdirs$2;
+const pathExists$1 = pathExists_1.pathExists;
+function outputFile$1(file2, data, encoding, callback) {
+  if (typeof encoding === "function") {
+    callback = encoding;
+    encoding = "utf8";
+  }
+  const dir = path$b.dirname(file2);
+  pathExists$1(dir, (err, itDoes) => {
+    if (err) return callback(err);
+    if (itDoes) return fs$2.writeFile(file2, data, encoding, callback);
+    mkdir.mkdirs(dir, (err2) => {
+      if (err2) return callback(err2);
+      fs$2.writeFile(file2, data, encoding, callback);
+    });
+  });
+}
+function outputFileSync$1(file2, ...args) {
+  const dir = path$b.dirname(file2);
+  if (fs$2.existsSync(dir)) {
+    return fs$2.writeFileSync(file2, ...args);
+  }
+  mkdir.mkdirsSync(dir);
+  fs$2.writeFileSync(file2, ...args);
+}
+var outputFile_1 = {
+  outputFile: u$2(outputFile$1),
+  outputFileSync: outputFileSync$1
+};
+const { stringify: stringify$2 } = utils;
+const { outputFile } = outputFile_1;
+async function outputJson(file2, data, options = {}) {
+  const str2 = stringify$2(data, options);
+  await outputFile(file2, str2, options);
+}
+var outputJson_1 = outputJson;
+const { stringify: stringify$1 } = utils;
+const { outputFileSync } = outputFile_1;
+function outputJsonSync(file2, data, options) {
+  const str2 = stringify$1(data, options);
+  outputFileSync(file2, str2, options);
+}
+var outputJsonSync_1 = outputJsonSync;
+const u$1 = universalify$1.fromPromise;
+const jsonFile = jsonfile;
+jsonFile.outputJson = u$1(outputJson_1);
+jsonFile.outputJsonSync = outputJsonSync_1;
+jsonFile.outputJSON = jsonFile.outputJson;
+jsonFile.outputJSONSync = jsonFile.outputJsonSync;
+jsonFile.writeJSON = jsonFile.writeJson;
+jsonFile.writeJSONSync = jsonFile.writeJsonSync;
+jsonFile.readJSON = jsonFile.readJson;
+jsonFile.readJSONSync = jsonFile.readJsonSync;
+var json$1 = jsonFile;
+const fs$1 = gracefulFs;
+const path$a = require$$1$1;
+const copy = copy$1.copy;
+const remove = remove_1.remove;
+const mkdirp = mkdirs$2.mkdirp;
+const pathExists = pathExists_1.pathExists;
+const stat$1 = stat$4;
+function move$1(src2, dest, opts, cb) {
+  if (typeof opts === "function") {
+    cb = opts;
+    opts = {};
+  }
+  opts = opts || {};
+  const overwrite = opts.overwrite || opts.clobber || false;
+  stat$1.checkPaths(src2, dest, "move", opts, (err, stats) => {
+    if (err) return cb(err);
+    const { srcStat, isChangingCase = false } = stats;
+    stat$1.checkParentPaths(src2, srcStat, dest, "move", (err2) => {
+      if (err2) return cb(err2);
+      if (isParentRoot$1(dest)) return doRename$1(src2, dest, overwrite, isChangingCase, cb);
+      mkdirp(path$a.dirname(dest), (err3) => {
+        if (err3) return cb(err3);
+        return doRename$1(src2, dest, overwrite, isChangingCase, cb);
+      });
+    });
+  });
+}
+function isParentRoot$1(dest) {
+  const parent = path$a.dirname(dest);
+  const parsedPath = path$a.parse(parent);
+  return parsedPath.root === parent;
+}
+function doRename$1(src2, dest, overwrite, isChangingCase, cb) {
+  if (isChangingCase) return rename$1(src2, dest, overwrite, cb);
+  if (overwrite) {
+    return remove(dest, (err) => {
+      if (err) return cb(err);
+      return rename$1(src2, dest, overwrite, cb);
+    });
+  }
+  pathExists(dest, (err, destExists) => {
+    if (err) return cb(err);
+    if (destExists) return cb(new Error("dest already exists."));
+    return rename$1(src2, dest, overwrite, cb);
+  });
+}
+function rename$1(src2, dest, overwrite, cb) {
+  fs$1.rename(src2, dest, (err) => {
+    if (!err) return cb();
+    if (err.code !== "EXDEV") return cb(err);
+    return moveAcrossDevice$1(src2, dest, overwrite, cb);
+  });
+}
+function moveAcrossDevice$1(src2, dest, overwrite, cb) {
+  const opts = {
+    overwrite,
+    errorOnExist: true
+  };
+  copy(src2, dest, opts, (err) => {
+    if (err) return cb(err);
+    return remove(src2, cb);
+  });
+}
+var move_1 = move$1;
+const fs = gracefulFs;
+const path$9 = require$$1$1;
+const copySync = copy$1.copySync;
+const removeSync = remove_1.removeSync;
+const mkdirpSync = mkdirs$2.mkdirpSync;
+const stat = stat$4;
+function moveSync(src2, dest, opts) {
+  opts = opts || {};
+  const overwrite = opts.overwrite || opts.clobber || false;
+  const { srcStat, isChangingCase = false } = stat.checkPathsSync(src2, dest, "move", opts);
+  stat.checkParentPathsSync(src2, srcStat, dest, "move");
+  if (!isParentRoot(dest)) mkdirpSync(path$9.dirname(dest));
+  return doRename(src2, dest, overwrite, isChangingCase);
+}
+function isParentRoot(dest) {
+  const parent = path$9.dirname(dest);
+  const parsedPath = path$9.parse(parent);
+  return parsedPath.root === parent;
+}
+function doRename(src2, dest, overwrite, isChangingCase) {
+  if (isChangingCase) return rename(src2, dest, overwrite);
+  if (overwrite) {
+    removeSync(dest);
+    return rename(src2, dest, overwrite);
+  }
+  if (fs.existsSync(dest)) throw new Error("dest already exists.");
+  return rename(src2, dest, overwrite);
+}
+function rename(src2, dest, overwrite) {
+  try {
+    fs.renameSync(src2, dest);
+  } catch (err) {
+    if (err.code !== "EXDEV") throw err;
+    return moveAcrossDevice(src2, dest, overwrite);
+  }
+}
+function moveAcrossDevice(src2, dest, overwrite) {
+  const opts = {
+    overwrite,
+    errorOnExist: true
+  };
+  copySync(src2, dest, opts);
+  return removeSync(src2);
+}
+var moveSync_1 = moveSync;
+const u = universalify$1.fromCallback;
+var move = {
+  move: u(move_1),
+  moveSync: moveSync_1
+};
+var lib = {
+  // Export promiseified graceful-fs:
+  ...fs$i,
+  // Export extra methods:
+  ...copy$1,
+  ...empty,
+  ...ensure,
+  ...json$1,
+  ...mkdirs$2,
+  ...move,
+  ...outputFile_1,
+  ...pathExists_1,
+  ...remove_1
+};
+var BaseUpdater$1 = {};
+var AppUpdater$1 = {};
 var out = {};
 var CancellationToken$1 = {};
 Object.defineProperty(CancellationToken$1, "__esModule", { value: true });
 CancellationToken$1.CancellationError = CancellationToken$1.CancellationToken = void 0;
-const events_1 = require$$0;
-class CancellationToken extends events_1.EventEmitter {
+const events_1$1 = require$$0$2;
+class CancellationToken extends events_1$1.EventEmitter {
   get cancelled() {
     return this._cancelled || this._parent != null && this._parent.cancelled;
   }
@@ -121,8 +2358,16 @@ class CancellationError extends Error {
   }
 }
 CancellationToken$1.CancellationError = CancellationError;
+var error = {};
+Object.defineProperty(error, "__esModule", { value: true });
+error.newError = newError;
+function newError(message, code) {
+  const error2 = new Error(message);
+  error2.code = code;
+  return error2;
+}
 var httpExecutor = {};
-var src = { exports: {} };
+var src$1 = { exports: {} };
 var browser = { exports: {} };
 var ms;
 var hasRequiredMs;
@@ -611,7 +2856,7 @@ function requireSupportsColor() {
   if (hasRequiredSupportsColor) return supportsColor_1;
   hasRequiredSupportsColor = 1;
   const os2 = require$$2;
-  const tty = require$$1;
+  const tty = require$$1$2;
   const hasFlag2 = requireHasFlag();
   const { env } = process;
   let forceColor;
@@ -712,8 +2957,8 @@ function requireNode() {
   if (hasRequiredNode) return node.exports;
   hasRequiredNode = 1;
   (function(module, exports) {
-    const tty = require$$1;
-    const util2 = require$$1$1;
+    const tty = require$$1$2;
+    const util2 = require$$4;
     exports.init = init;
     exports.log = log;
     exports.formatArgs = formatArgs;
@@ -884,19 +3129,11 @@ function requireNode() {
   return node.exports;
 }
 if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
-  src.exports = requireBrowser();
+  src$1.exports = requireBrowser();
 } else {
-  src.exports = requireNode();
+  src$1.exports = requireNode();
 }
-var srcExports = src.exports;
-var error = {};
-Object.defineProperty(error, "__esModule", { value: true });
-error.newError = newError;
-function newError(message, code) {
-  const error2 = new Error(message);
-  error2.code = code;
-  return error2;
-}
+var srcExports = src$1.exports;
 var ProgressCallbackTransform$1 = {};
 Object.defineProperty(ProgressCallbackTransform$1, "__esModule", { value: true });
 ProgressCallbackTransform$1.ProgressCallbackTransform = void 0;
@@ -959,15 +3196,15 @@ httpExecutor.configureRequestUrl = configureRequestUrl;
 httpExecutor.safeGetHeader = safeGetHeader;
 httpExecutor.configureRequestOptions = configureRequestOptions;
 httpExecutor.safeStringifyJson = safeStringifyJson;
-const crypto_1$2 = require$$0$2;
+const crypto_1$4 = require$$0$3;
 const debug_1$1 = srcExports;
-const fs_1$3 = require$$1$2;
+const fs_1$5 = require$$1;
 const stream_1$2 = require$$0$1;
-const url_1$4 = require$$4;
+const url_1$5 = require$$4$1;
 const CancellationToken_1$1 = CancellationToken$1;
 const error_1$2 = error;
 const ProgressCallbackTransform_1 = ProgressCallbackTransform$1;
-const debug$3 = (0, debug_1$1.default)("electron-builder");
+const debug$2 = (0, debug_1$1.default)("electron-builder");
 function createHttpError(response, description = null) {
   return new HttpError(response.statusCode || -1, `${response.statusCode} ${response.statusMessage}` + (description == null ? "" : "\n" + JSON.stringify(description, null, "  ")) + "\nHeaders: " + safeStringifyJson(response.headers), description);
 }
@@ -1011,7 +3248,7 @@ class HttpExecutor {
     const json2 = data == null ? void 0 : JSON.stringify(data);
     const encodedData = json2 ? Buffer.from(json2) : void 0;
     if (encodedData != null) {
-      debug$3(json2);
+      debug$2(json2);
       const { headers, ...opts } = options;
       options = {
         method: "post",
@@ -1026,8 +3263,8 @@ class HttpExecutor {
     return this.doApiRequest(options, cancellationToken, (it) => it.end(encodedData));
   }
   doApiRequest(options, cancellationToken, requestProcessor, redirectCount = 0) {
-    if (debug$3.enabled) {
-      debug$3(`Request: ${safeStringifyJson(options)}`);
+    if (debug$2.enabled) {
+      debug$2(`Request: ${safeStringifyJson(options)}`);
     }
     return cancellationToken.createPromise((resolve, reject, onCancel) => {
       const request = this.createRequest(options, (response) => {
@@ -1058,8 +3295,8 @@ class HttpExecutor {
   }
   handleResponse(response, options, cancellationToken, resolve, reject, redirectCount, requestProcessor) {
     var _a;
-    if (debug$3.enabled) {
-      debug$3(`Response: ${response.statusCode} ${response.statusMessage}, request options: ${safeStringifyJson(options)}`);
+    if (debug$2.enabled) {
+      debug$2(`Response: ${response.statusCode} ${response.statusMessage}, request options: ${safeStringifyJson(options)}`);
     }
     if (response.statusCode === 404) {
       reject(createHttpError(response, `method: ${options.method || "GET"} url: ${options.protocol || "https:"}//${options.hostname}${options.port ? `:${options.port}` : ""}${options.path}
@@ -1185,7 +3422,7 @@ Please double check that your authentication token is correct. Due to security r
     const newOptions = configureRequestOptionsFromUrl(redirectUrl, { ...options });
     const headers = newOptions.headers;
     if (headers === null || headers === void 0 ? void 0 : headers.authorization) {
-      const parsedNewUrl = new url_1$4.URL(redirectUrl);
+      const parsedNewUrl = new url_1$5.URL(redirectUrl);
       if (parsedNewUrl.hostname.endsWith(".amazonaws.com") || parsedNewUrl.searchParams.has("X-Amz-Credential")) {
         delete headers.authorization;
       }
@@ -1208,7 +3445,7 @@ Please double check that your authentication token is correct. Due to security r
 httpExecutor.HttpExecutor = HttpExecutor;
 function configureRequestOptionsFromUrl(url, options) {
   const result = configureRequestOptions(options);
-  configureRequestUrl(new url_1$4.URL(url), result);
+  configureRequestUrl(new url_1$5.URL(url), result);
   return result;
 }
 function configureRequestUrl(url, options) {
@@ -1233,7 +3470,7 @@ class DigestTransform extends stream_1$2.Transform {
     this.encoding = encoding;
     this._actual = null;
     this.isValidateOnEnd = true;
-    this.digester = (0, crypto_1$2.createHash)(algorithm);
+    this.digester = (0, crypto_1$4.createHash)(algorithm);
   }
   // noinspection JSUnusedGlobalSymbols
   _transform(chunk, encoding, callback) {
@@ -1298,7 +3535,7 @@ function configurePipes(options, response) {
   } else if (options.options.sha2 != null) {
     streams.push(new DigestTransform(options.options.sha2, "sha256", "hex"));
   }
-  const fileOut = (0, fs_1$3.createWriteStream)(options.destination);
+  const fileOut = (0, fs_1$5.createWriteStream)(options.destination);
   streams.push(fileOut);
   let lastStream = response;
   for (const stream of streams) {
@@ -1341,6 +3578,44 @@ function safeStringifyJson(data, skippedNames) {
     }
     return value;
   }, 2);
+}
+var MemoLazy$1 = {};
+Object.defineProperty(MemoLazy$1, "__esModule", { value: true });
+MemoLazy$1.MemoLazy = void 0;
+class MemoLazy {
+  constructor(selector, creator) {
+    this.selector = selector;
+    this.creator = creator;
+    this.selected = void 0;
+    this._value = void 0;
+  }
+  get hasValue() {
+    return this._value !== void 0;
+  }
+  get value() {
+    const selected = this.selector();
+    if (this._value !== void 0 && equals(this.selected, selected)) {
+      return this._value;
+    }
+    this.selected = selected;
+    const result = this.creator(selected);
+    this.value = result;
+    return result;
+  }
+  set value(value) {
+    this._value = value;
+  }
+}
+MemoLazy$1.MemoLazy = MemoLazy;
+function equals(firstValue, secondValue) {
+  const isFirstObject = typeof firstValue === "object" && firstValue !== null;
+  const isSecondObject = typeof secondValue === "object" && secondValue !== null;
+  if (isFirstObject && isSecondObject) {
+    const keys1 = Object.keys(firstValue);
+    const keys2 = Object.keys(secondValue);
+    return keys1.length === keys2.length && keys1.every((key) => equals(firstValue[key], secondValue[key]));
+  }
+  return firstValue === secondValue;
 }
 var publishOptions = {};
 Object.defineProperty(publishOptions, "__esModule", { value: true });
@@ -1398,6 +3673,24 @@ function spacesUrl(options) {
     throw new Error(`region is missing`);
   }
   return appendPath(`https://${options.name}.${options.region}.digitaloceanspaces.com`, options.path);
+}
+var retry$1 = {};
+Object.defineProperty(retry$1, "__esModule", { value: true });
+retry$1.retry = retry;
+const CancellationToken_1 = CancellationToken$1;
+async function retry(task, retryCount, interval, backoff = 0, attempt = 0, shouldRetry) {
+  var _a;
+  const cancellationToken = new CancellationToken_1.CancellationToken();
+  try {
+    return await task();
+  } catch (error2) {
+    if (((_a = shouldRetry === null || shouldRetry === void 0 ? void 0 : shouldRetry(error2)) !== null && _a !== void 0 ? _a : true) && retryCount > 0 && !cancellationToken.cancelled) {
+      await new Promise((resolve) => setTimeout(resolve, interval + backoff * attempt));
+      return await retry(task, retryCount - 1, interval, backoff, attempt + 1, shouldRetry);
+    } else {
+      throw error2;
+    }
+  }
 }
 var rfc2253Parser = {};
 Object.defineProperty(rfc2253Parser, "__esModule", { value: true });
@@ -1475,10 +3768,10 @@ function parseDn(seq2) {
 var uuid = {};
 Object.defineProperty(uuid, "__esModule", { value: true });
 uuid.nil = uuid.UUID = void 0;
-const crypto_1$1 = require$$0$2;
+const crypto_1$3 = require$$0$3;
 const error_1$1 = error;
 const invalidName = "options.name must be either a string or a Buffer";
-const randomHost = (0, crypto_1$1.randomBytes)(16);
+const randomHost = (0, crypto_1$3.randomBytes)(16);
 randomHost[0] = randomHost[0] | 1;
 const hex2byte = {};
 const byte2hex = [];
@@ -1507,7 +3800,7 @@ class UUID {
   }
   toString() {
     if (this.ascii == null) {
-      this.ascii = stringify$4(this.binary);
+      this.ascii = stringify(this.binary);
     }
     return this.ascii;
   }
@@ -1587,7 +3880,7 @@ var UuidEncoding;
   UuidEncoding2[UuidEncoding2["OBJECT"] = 2] = "OBJECT";
 })(UuidEncoding || (UuidEncoding = {}));
 function uuidNamed(name, hashMethod, version, namespace, encoding = UuidEncoding.ASCII) {
-  const hash = (0, crypto_1$1.createHash)(hashMethod);
+  const hash = (0, crypto_1$3.createHash)(hashMethod);
   const nameIsNotAString = typeof name !== "string";
   if (nameIsNotAString && !Buffer.isBuffer(name)) {
     throw (0, error_1$1.newError)(invalidName, "ERR_INVALID_UUID_NAME");
@@ -1613,7 +3906,7 @@ function uuidNamed(name, hashMethod, version, namespace, encoding = UuidEncoding
   }
   return result;
 }
-function stringify$4(buffer) {
+function stringify(buffer) {
   return byte2hex[buffer[0]] + byte2hex[buffer[1]] + byte2hex[buffer[2]] + byte2hex[buffer[3]] + "-" + byte2hex[buffer[4]] + byte2hex[buffer[5]] + "-" + byte2hex[buffer[6]] + byte2hex[buffer[7]] + "-" + byte2hex[buffer[8]] + byte2hex[buffer[9]] + "-" + byte2hex[buffer[10]] + byte2hex[buffer[11]] + byte2hex[buffer[12]] + byte2hex[buffer[13]] + byte2hex[buffer[14]] + byte2hex[buffer[15]];
 }
 uuid.nil = new UUID("00000000-0000-0000-0000-000000000000");
@@ -3183,103 +5476,59 @@ function parseXml(data) {
   parser.write(data);
   return rootElement;
 }
-var MemoLazy$1 = {};
-Object.defineProperty(MemoLazy$1, "__esModule", { value: true });
-MemoLazy$1.MemoLazy = void 0;
-class MemoLazy {
-  constructor(selector, creator) {
-    this.selector = selector;
-    this.creator = creator;
-    this.selected = void 0;
-    this._value = void 0;
-  }
-  get hasValue() {
-    return this._value !== void 0;
-  }
-  get value() {
-    const selected = this.selector();
-    if (this._value !== void 0 && equals(this.selected, selected)) {
-      return this._value;
-    }
-    this.selected = selected;
-    const result = this.creator(selected);
-    this.value = result;
-    return result;
-  }
-  set value(value) {
-    this._value = value;
-  }
-}
-MemoLazy$1.MemoLazy = MemoLazy;
-function equals(firstValue, secondValue) {
-  const isFirstObject = typeof firstValue === "object" && firstValue !== null;
-  const isSecondObject = typeof secondValue === "object" && secondValue !== null;
-  if (isFirstObject && isSecondObject) {
-    const keys1 = Object.keys(firstValue);
-    const keys2 = Object.keys(secondValue);
-    return keys1.length === keys2.length && keys1.every((key) => equals(firstValue[key], secondValue[key]));
-  }
-  return firstValue === secondValue;
-}
-var retry$2 = {};
-Object.defineProperty(retry$2, "__esModule", { value: true });
-retry$2.retry = retry$1;
-const CancellationToken_1 = CancellationToken$1;
-async function retry$1(task, retryCount, interval, backoff = 0, attempt = 0, shouldRetry) {
-  var _a;
-  const cancellationToken = new CancellationToken_1.CancellationToken();
-  try {
-    return await task();
-  } catch (error2) {
-    if (((_a = shouldRetry === null || shouldRetry === void 0 ? void 0 : shouldRetry(error2)) !== null && _a !== void 0 ? _a : true) && retryCount > 0 && !cancellationToken.cancelled) {
-      await new Promise((resolve) => setTimeout(resolve, interval + backoff * attempt));
-      return await retry$1(task, retryCount - 1, interval, backoff, attempt + 1, shouldRetry);
-    } else {
-      throw error2;
-    }
-  }
-}
 (function(exports) {
   Object.defineProperty(exports, "__esModule", { value: true });
-  exports.CURRENT_APP_PACKAGE_FILE_NAME = exports.CURRENT_APP_INSTALLER_FILE_NAME = exports.retry = exports.MemoLazy = exports.newError = exports.XElement = exports.parseXml = exports.ProgressCallbackTransform = exports.UUID = exports.parseDn = exports.githubUrl = exports.getS3LikeProviderBaseUrl = exports.configureRequestUrl = exports.parseJson = exports.safeStringifyJson = exports.configureRequestOptionsFromUrl = exports.configureRequestOptions = exports.safeGetHeader = exports.DigestTransform = exports.HttpExecutor = exports.createHttpError = exports.HttpError = exports.CancellationError = exports.CancellationToken = void 0;
+  exports.CURRENT_APP_PACKAGE_FILE_NAME = exports.CURRENT_APP_INSTALLER_FILE_NAME = exports.XElement = exports.parseXml = exports.UUID = exports.parseDn = exports.retry = exports.githubUrl = exports.getS3LikeProviderBaseUrl = exports.ProgressCallbackTransform = exports.MemoLazy = exports.safeStringifyJson = exports.safeGetHeader = exports.parseJson = exports.HttpExecutor = exports.HttpError = exports.DigestTransform = exports.createHttpError = exports.configureRequestUrl = exports.configureRequestOptionsFromUrl = exports.configureRequestOptions = exports.newError = exports.CancellationToken = exports.CancellationError = void 0;
   exports.asArray = asArray;
   var CancellationToken_12 = CancellationToken$1;
-  Object.defineProperty(exports, "CancellationToken", { enumerable: true, get: function() {
-    return CancellationToken_12.CancellationToken;
-  } });
   Object.defineProperty(exports, "CancellationError", { enumerable: true, get: function() {
     return CancellationToken_12.CancellationError;
   } });
+  Object.defineProperty(exports, "CancellationToken", { enumerable: true, get: function() {
+    return CancellationToken_12.CancellationToken;
+  } });
+  var error_12 = error;
+  Object.defineProperty(exports, "newError", { enumerable: true, get: function() {
+    return error_12.newError;
+  } });
   var httpExecutor_1 = httpExecutor;
-  Object.defineProperty(exports, "HttpError", { enumerable: true, get: function() {
-    return httpExecutor_1.HttpError;
-  } });
-  Object.defineProperty(exports, "createHttpError", { enumerable: true, get: function() {
-    return httpExecutor_1.createHttpError;
-  } });
-  Object.defineProperty(exports, "HttpExecutor", { enumerable: true, get: function() {
-    return httpExecutor_1.HttpExecutor;
-  } });
-  Object.defineProperty(exports, "DigestTransform", { enumerable: true, get: function() {
-    return httpExecutor_1.DigestTransform;
-  } });
-  Object.defineProperty(exports, "safeGetHeader", { enumerable: true, get: function() {
-    return httpExecutor_1.safeGetHeader;
-  } });
   Object.defineProperty(exports, "configureRequestOptions", { enumerable: true, get: function() {
     return httpExecutor_1.configureRequestOptions;
   } });
   Object.defineProperty(exports, "configureRequestOptionsFromUrl", { enumerable: true, get: function() {
     return httpExecutor_1.configureRequestOptionsFromUrl;
   } });
-  Object.defineProperty(exports, "safeStringifyJson", { enumerable: true, get: function() {
-    return httpExecutor_1.safeStringifyJson;
+  Object.defineProperty(exports, "configureRequestUrl", { enumerable: true, get: function() {
+    return httpExecutor_1.configureRequestUrl;
+  } });
+  Object.defineProperty(exports, "createHttpError", { enumerable: true, get: function() {
+    return httpExecutor_1.createHttpError;
+  } });
+  Object.defineProperty(exports, "DigestTransform", { enumerable: true, get: function() {
+    return httpExecutor_1.DigestTransform;
+  } });
+  Object.defineProperty(exports, "HttpError", { enumerable: true, get: function() {
+    return httpExecutor_1.HttpError;
+  } });
+  Object.defineProperty(exports, "HttpExecutor", { enumerable: true, get: function() {
+    return httpExecutor_1.HttpExecutor;
   } });
   Object.defineProperty(exports, "parseJson", { enumerable: true, get: function() {
     return httpExecutor_1.parseJson;
   } });
-  Object.defineProperty(exports, "configureRequestUrl", { enumerable: true, get: function() {
-    return httpExecutor_1.configureRequestUrl;
+  Object.defineProperty(exports, "safeGetHeader", { enumerable: true, get: function() {
+    return httpExecutor_1.safeGetHeader;
+  } });
+  Object.defineProperty(exports, "safeStringifyJson", { enumerable: true, get: function() {
+    return httpExecutor_1.safeStringifyJson;
+  } });
+  var MemoLazy_1 = MemoLazy$1;
+  Object.defineProperty(exports, "MemoLazy", { enumerable: true, get: function() {
+    return MemoLazy_1.MemoLazy;
+  } });
+  var ProgressCallbackTransform_12 = ProgressCallbackTransform$1;
+  Object.defineProperty(exports, "ProgressCallbackTransform", { enumerable: true, get: function() {
+    return ProgressCallbackTransform_12.ProgressCallbackTransform;
   } });
   var publishOptions_1 = publishOptions;
   Object.defineProperty(exports, "getS3LikeProviderBaseUrl", { enumerable: true, get: function() {
@@ -3287,6 +5536,10 @@ async function retry$1(task, retryCount, interval, backoff = 0, attempt = 0, sho
   } });
   Object.defineProperty(exports, "githubUrl", { enumerable: true, get: function() {
     return publishOptions_1.githubUrl;
+  } });
+  var retry_1 = retry$1;
+  Object.defineProperty(exports, "retry", { enumerable: true, get: function() {
+    return retry_1.retry;
   } });
   var rfc2253Parser_1 = rfc2253Parser;
   Object.defineProperty(exports, "parseDn", { enumerable: true, get: function() {
@@ -3296,28 +5549,12 @@ async function retry$1(task, retryCount, interval, backoff = 0, attempt = 0, sho
   Object.defineProperty(exports, "UUID", { enumerable: true, get: function() {
     return uuid_1.UUID;
   } });
-  var ProgressCallbackTransform_12 = ProgressCallbackTransform$1;
-  Object.defineProperty(exports, "ProgressCallbackTransform", { enumerable: true, get: function() {
-    return ProgressCallbackTransform_12.ProgressCallbackTransform;
-  } });
   var xml_1 = xml;
   Object.defineProperty(exports, "parseXml", { enumerable: true, get: function() {
     return xml_1.parseXml;
   } });
   Object.defineProperty(exports, "XElement", { enumerable: true, get: function() {
     return xml_1.XElement;
-  } });
-  var error_12 = error;
-  Object.defineProperty(exports, "newError", { enumerable: true, get: function() {
-    return error_12.newError;
-  } });
-  var MemoLazy_1 = MemoLazy$1;
-  Object.defineProperty(exports, "MemoLazy", { enumerable: true, get: function() {
-    return MemoLazy_1.MemoLazy;
-  } });
-  var retry_1 = retry$2;
-  Object.defineProperty(exports, "retry", { enumerable: true, get: function() {
-    return retry_1.retry;
   } });
   exports.CURRENT_APP_INSTALLER_FILE_NAME = "installer.exe";
   exports.CURRENT_APP_PACKAGE_FILE_NAME = "package.7z";
@@ -3331,2243 +5568,6 @@ async function retry$1(task, retryCount, interval, backoff = 0, attempt = 0, sho
     }
   }
 })(out);
-var fs$i = {};
-var universalify$1 = {};
-universalify$1.fromCallback = function(fn) {
-  return Object.defineProperty(function(...args) {
-    if (typeof args[args.length - 1] === "function") fn.apply(this, args);
-    else {
-      return new Promise((resolve, reject) => {
-        args.push((err, res) => err != null ? reject(err) : resolve(res));
-        fn.apply(this, args);
-      });
-    }
-  }, "name", { value: fn.name });
-};
-universalify$1.fromPromise = function(fn) {
-  return Object.defineProperty(function(...args) {
-    const cb = args[args.length - 1];
-    if (typeof cb !== "function") return fn.apply(this, args);
-    else {
-      args.pop();
-      fn.apply(this, args).then((r) => cb(null, r), cb);
-    }
-  }, "name", { value: fn.name });
-};
-var constants$2 = require$$0$3;
-var origCwd = process.cwd;
-var cwd = null;
-var platform = process.env.GRACEFUL_FS_PLATFORM || process.platform;
-process.cwd = function() {
-  if (!cwd)
-    cwd = origCwd.call(process);
-  return cwd;
-};
-try {
-  process.cwd();
-} catch (er) {
-}
-if (typeof process.chdir === "function") {
-  var chdir = process.chdir;
-  process.chdir = function(d) {
-    cwd = null;
-    chdir.call(process, d);
-  };
-  if (Object.setPrototypeOf) Object.setPrototypeOf(process.chdir, chdir);
-}
-var polyfills$1 = patch$3;
-function patch$3(fs2) {
-  if (constants$2.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-    patchLchmod(fs2);
-  }
-  if (!fs2.lutimes) {
-    patchLutimes(fs2);
-  }
-  fs2.chown = chownFix(fs2.chown);
-  fs2.fchown = chownFix(fs2.fchown);
-  fs2.lchown = chownFix(fs2.lchown);
-  fs2.chmod = chmodFix(fs2.chmod);
-  fs2.fchmod = chmodFix(fs2.fchmod);
-  fs2.lchmod = chmodFix(fs2.lchmod);
-  fs2.chownSync = chownFixSync(fs2.chownSync);
-  fs2.fchownSync = chownFixSync(fs2.fchownSync);
-  fs2.lchownSync = chownFixSync(fs2.lchownSync);
-  fs2.chmodSync = chmodFixSync(fs2.chmodSync);
-  fs2.fchmodSync = chmodFixSync(fs2.fchmodSync);
-  fs2.lchmodSync = chmodFixSync(fs2.lchmodSync);
-  fs2.stat = statFix(fs2.stat);
-  fs2.fstat = statFix(fs2.fstat);
-  fs2.lstat = statFix(fs2.lstat);
-  fs2.statSync = statFixSync(fs2.statSync);
-  fs2.fstatSync = statFixSync(fs2.fstatSync);
-  fs2.lstatSync = statFixSync(fs2.lstatSync);
-  if (fs2.chmod && !fs2.lchmod) {
-    fs2.lchmod = function(path2, mode, cb) {
-      if (cb) process.nextTick(cb);
-    };
-    fs2.lchmodSync = function() {
-    };
-  }
-  if (fs2.chown && !fs2.lchown) {
-    fs2.lchown = function(path2, uid, gid, cb) {
-      if (cb) process.nextTick(cb);
-    };
-    fs2.lchownSync = function() {
-    };
-  }
-  if (platform === "win32") {
-    fs2.rename = typeof fs2.rename !== "function" ? fs2.rename : function(fs$rename) {
-      function rename2(from, to, cb) {
-        var start = Date.now();
-        var backoff = 0;
-        fs$rename(from, to, function CB(er) {
-          if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
-            setTimeout(function() {
-              fs2.stat(to, function(stater, st) {
-                if (stater && stater.code === "ENOENT")
-                  fs$rename(from, to, CB);
-                else
-                  cb(er);
-              });
-            }, backoff);
-            if (backoff < 100)
-              backoff += 10;
-            return;
-          }
-          if (cb) cb(er);
-        });
-      }
-      if (Object.setPrototypeOf) Object.setPrototypeOf(rename2, fs$rename);
-      return rename2;
-    }(fs2.rename);
-  }
-  fs2.read = typeof fs2.read !== "function" ? fs2.read : function(fs$read) {
-    function read(fd, buffer, offset, length, position, callback_) {
-      var callback;
-      if (callback_ && typeof callback_ === "function") {
-        var eagCounter = 0;
-        callback = function(er, _, __) {
-          if (er && er.code === "EAGAIN" && eagCounter < 10) {
-            eagCounter++;
-            return fs$read.call(fs2, fd, buffer, offset, length, position, callback);
-          }
-          callback_.apply(this, arguments);
-        };
-      }
-      return fs$read.call(fs2, fd, buffer, offset, length, position, callback);
-    }
-    if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
-    return read;
-  }(fs2.read);
-  fs2.readSync = typeof fs2.readSync !== "function" ? fs2.readSync : /* @__PURE__ */ function(fs$readSync) {
-    return function(fd, buffer, offset, length, position) {
-      var eagCounter = 0;
-      while (true) {
-        try {
-          return fs$readSync.call(fs2, fd, buffer, offset, length, position);
-        } catch (er) {
-          if (er.code === "EAGAIN" && eagCounter < 10) {
-            eagCounter++;
-            continue;
-          }
-          throw er;
-        }
-      }
-    };
-  }(fs2.readSync);
-  function patchLchmod(fs22) {
-    fs22.lchmod = function(path2, mode, callback) {
-      fs22.open(
-        path2,
-        constants$2.O_WRONLY | constants$2.O_SYMLINK,
-        mode,
-        function(err, fd) {
-          if (err) {
-            if (callback) callback(err);
-            return;
-          }
-          fs22.fchmod(fd, mode, function(err2) {
-            fs22.close(fd, function(err22) {
-              if (callback) callback(err2 || err22);
-            });
-          });
-        }
-      );
-    };
-    fs22.lchmodSync = function(path2, mode) {
-      var fd = fs22.openSync(path2, constants$2.O_WRONLY | constants$2.O_SYMLINK, mode);
-      var threw = true;
-      var ret;
-      try {
-        ret = fs22.fchmodSync(fd, mode);
-        threw = false;
-      } finally {
-        if (threw) {
-          try {
-            fs22.closeSync(fd);
-          } catch (er) {
-          }
-        } else {
-          fs22.closeSync(fd);
-        }
-      }
-      return ret;
-    };
-  }
-  function patchLutimes(fs22) {
-    if (constants$2.hasOwnProperty("O_SYMLINK") && fs22.futimes) {
-      fs22.lutimes = function(path2, at, mt, cb) {
-        fs22.open(path2, constants$2.O_SYMLINK, function(er, fd) {
-          if (er) {
-            if (cb) cb(er);
-            return;
-          }
-          fs22.futimes(fd, at, mt, function(er2) {
-            fs22.close(fd, function(er22) {
-              if (cb) cb(er2 || er22);
-            });
-          });
-        });
-      };
-      fs22.lutimesSync = function(path2, at, mt) {
-        var fd = fs22.openSync(path2, constants$2.O_SYMLINK);
-        var ret;
-        var threw = true;
-        try {
-          ret = fs22.futimesSync(fd, at, mt);
-          threw = false;
-        } finally {
-          if (threw) {
-            try {
-              fs22.closeSync(fd);
-            } catch (er) {
-            }
-          } else {
-            fs22.closeSync(fd);
-          }
-        }
-        return ret;
-      };
-    } else if (fs22.futimes) {
-      fs22.lutimes = function(_a, _b, _c, cb) {
-        if (cb) process.nextTick(cb);
-      };
-      fs22.lutimesSync = function() {
-      };
-    }
-  }
-  function chmodFix(orig) {
-    if (!orig) return orig;
-    return function(target, mode, cb) {
-      return orig.call(fs2, target, mode, function(er) {
-        if (chownErOk(er)) er = null;
-        if (cb) cb.apply(this, arguments);
-      });
-    };
-  }
-  function chmodFixSync(orig) {
-    if (!orig) return orig;
-    return function(target, mode) {
-      try {
-        return orig.call(fs2, target, mode);
-      } catch (er) {
-        if (!chownErOk(er)) throw er;
-      }
-    };
-  }
-  function chownFix(orig) {
-    if (!orig) return orig;
-    return function(target, uid, gid, cb) {
-      return orig.call(fs2, target, uid, gid, function(er) {
-        if (chownErOk(er)) er = null;
-        if (cb) cb.apply(this, arguments);
-      });
-    };
-  }
-  function chownFixSync(orig) {
-    if (!orig) return orig;
-    return function(target, uid, gid) {
-      try {
-        return orig.call(fs2, target, uid, gid);
-      } catch (er) {
-        if (!chownErOk(er)) throw er;
-      }
-    };
-  }
-  function statFix(orig) {
-    if (!orig) return orig;
-    return function(target, options, cb) {
-      if (typeof options === "function") {
-        cb = options;
-        options = null;
-      }
-      function callback(er, stats) {
-        if (stats) {
-          if (stats.uid < 0) stats.uid += 4294967296;
-          if (stats.gid < 0) stats.gid += 4294967296;
-        }
-        if (cb) cb.apply(this, arguments);
-      }
-      return options ? orig.call(fs2, target, options, callback) : orig.call(fs2, target, callback);
-    };
-  }
-  function statFixSync(orig) {
-    if (!orig) return orig;
-    return function(target, options) {
-      var stats = options ? orig.call(fs2, target, options) : orig.call(fs2, target);
-      if (stats) {
-        if (stats.uid < 0) stats.uid += 4294967296;
-        if (stats.gid < 0) stats.gid += 4294967296;
-      }
-      return stats;
-    };
-  }
-  function chownErOk(er) {
-    if (!er)
-      return true;
-    if (er.code === "ENOSYS")
-      return true;
-    var nonroot = !process.getuid || process.getuid() !== 0;
-    if (nonroot) {
-      if (er.code === "EINVAL" || er.code === "EPERM")
-        return true;
-    }
-    return false;
-  }
-}
-var Stream = require$$0$1.Stream;
-var legacyStreams = legacy$1;
-function legacy$1(fs2) {
-  return {
-    ReadStream,
-    WriteStream
-  };
-  function ReadStream(path2, options) {
-    if (!(this instanceof ReadStream)) return new ReadStream(path2, options);
-    Stream.call(this);
-    var self2 = this;
-    this.path = path2;
-    this.fd = null;
-    this.readable = true;
-    this.paused = false;
-    this.flags = "r";
-    this.mode = 438;
-    this.bufferSize = 64 * 1024;
-    options = options || {};
-    var keys = Object.keys(options);
-    for (var index = 0, length = keys.length; index < length; index++) {
-      var key = keys[index];
-      this[key] = options[key];
-    }
-    if (this.encoding) this.setEncoding(this.encoding);
-    if (this.start !== void 0) {
-      if ("number" !== typeof this.start) {
-        throw TypeError("start must be a Number");
-      }
-      if (this.end === void 0) {
-        this.end = Infinity;
-      } else if ("number" !== typeof this.end) {
-        throw TypeError("end must be a Number");
-      }
-      if (this.start > this.end) {
-        throw new Error("start must be <= end");
-      }
-      this.pos = this.start;
-    }
-    if (this.fd !== null) {
-      process.nextTick(function() {
-        self2._read();
-      });
-      return;
-    }
-    fs2.open(this.path, this.flags, this.mode, function(err, fd) {
-      if (err) {
-        self2.emit("error", err);
-        self2.readable = false;
-        return;
-      }
-      self2.fd = fd;
-      self2.emit("open", fd);
-      self2._read();
-    });
-  }
-  function WriteStream(path2, options) {
-    if (!(this instanceof WriteStream)) return new WriteStream(path2, options);
-    Stream.call(this);
-    this.path = path2;
-    this.fd = null;
-    this.writable = true;
-    this.flags = "w";
-    this.encoding = "binary";
-    this.mode = 438;
-    this.bytesWritten = 0;
-    options = options || {};
-    var keys = Object.keys(options);
-    for (var index = 0, length = keys.length; index < length; index++) {
-      var key = keys[index];
-      this[key] = options[key];
-    }
-    if (this.start !== void 0) {
-      if ("number" !== typeof this.start) {
-        throw TypeError("start must be a Number");
-      }
-      if (this.start < 0) {
-        throw new Error("start must be >= zero");
-      }
-      this.pos = this.start;
-    }
-    this.busy = false;
-    this._queue = [];
-    if (this.fd === null) {
-      this._open = fs2.open;
-      this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
-      this.flush();
-    }
-  }
-}
-var clone_1 = clone$1;
-var getPrototypeOf = Object.getPrototypeOf || function(obj) {
-  return obj.__proto__;
-};
-function clone$1(obj) {
-  if (obj === null || typeof obj !== "object")
-    return obj;
-  if (obj instanceof Object)
-    var copy2 = { __proto__: getPrototypeOf(obj) };
-  else
-    var copy2 = /* @__PURE__ */ Object.create(null);
-  Object.getOwnPropertyNames(obj).forEach(function(key) {
-    Object.defineProperty(copy2, key, Object.getOwnPropertyDescriptor(obj, key));
-  });
-  return copy2;
-}
-var fs$h = require$$1$2;
-var polyfills = polyfills$1;
-var legacy = legacyStreams;
-var clone = clone_1;
-var util$2 = require$$1$1;
-var gracefulQueue;
-var previousSymbol;
-if (typeof Symbol === "function" && typeof Symbol.for === "function") {
-  gracefulQueue = Symbol.for("graceful-fs.queue");
-  previousSymbol = Symbol.for("graceful-fs.previous");
-} else {
-  gracefulQueue = "___graceful-fs.queue";
-  previousSymbol = "___graceful-fs.previous";
-}
-function noop() {
-}
-function publishQueue(context, queue2) {
-  Object.defineProperty(context, gracefulQueue, {
-    get: function() {
-      return queue2;
-    }
-  });
-}
-var debug$2 = noop;
-if (util$2.debuglog)
-  debug$2 = util$2.debuglog("gfs4");
-else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || ""))
-  debug$2 = function() {
-    var m = util$2.format.apply(util$2, arguments);
-    m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
-    console.error(m);
-  };
-if (!fs$h[gracefulQueue]) {
-  var queue = commonjsGlobal[gracefulQueue] || [];
-  publishQueue(fs$h, queue);
-  fs$h.close = function(fs$close) {
-    function close(fd, cb) {
-      return fs$close.call(fs$h, fd, function(err) {
-        if (!err) {
-          resetQueue();
-        }
-        if (typeof cb === "function")
-          cb.apply(this, arguments);
-      });
-    }
-    Object.defineProperty(close, previousSymbol, {
-      value: fs$close
-    });
-    return close;
-  }(fs$h.close);
-  fs$h.closeSync = function(fs$closeSync) {
-    function closeSync(fd) {
-      fs$closeSync.apply(fs$h, arguments);
-      resetQueue();
-    }
-    Object.defineProperty(closeSync, previousSymbol, {
-      value: fs$closeSync
-    });
-    return closeSync;
-  }(fs$h.closeSync);
-  if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
-    process.on("exit", function() {
-      debug$2(fs$h[gracefulQueue]);
-      require$$5.equal(fs$h[gracefulQueue].length, 0);
-    });
-  }
-}
-if (!commonjsGlobal[gracefulQueue]) {
-  publishQueue(commonjsGlobal, fs$h[gracefulQueue]);
-}
-var gracefulFs = patch$2(clone(fs$h));
-if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs$h.__patched) {
-  gracefulFs = patch$2(fs$h);
-  fs$h.__patched = true;
-}
-function patch$2(fs2) {
-  polyfills(fs2);
-  fs2.gracefulify = patch$2;
-  fs2.createReadStream = createReadStream;
-  fs2.createWriteStream = createWriteStream2;
-  var fs$readFile = fs2.readFile;
-  fs2.readFile = readFile2;
-  function readFile2(path2, options, cb) {
-    if (typeof options === "function")
-      cb = options, options = null;
-    return go$readFile(path2, options, cb);
-    function go$readFile(path22, options2, cb2, startTime) {
-      return fs$readFile(path22, options2, function(err) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([go$readFile, [path22, options2, cb2], err, startTime || Date.now(), Date.now()]);
-        else {
-          if (typeof cb2 === "function")
-            cb2.apply(this, arguments);
-        }
-      });
-    }
-  }
-  var fs$writeFile = fs2.writeFile;
-  fs2.writeFile = writeFile2;
-  function writeFile2(path2, data, options, cb) {
-    if (typeof options === "function")
-      cb = options, options = null;
-    return go$writeFile(path2, data, options, cb);
-    function go$writeFile(path22, data2, options2, cb2, startTime) {
-      return fs$writeFile(path22, data2, options2, function(err) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([go$writeFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
-        else {
-          if (typeof cb2 === "function")
-            cb2.apply(this, arguments);
-        }
-      });
-    }
-  }
-  var fs$appendFile = fs2.appendFile;
-  if (fs$appendFile)
-    fs2.appendFile = appendFile;
-  function appendFile(path2, data, options, cb) {
-    if (typeof options === "function")
-      cb = options, options = null;
-    return go$appendFile(path2, data, options, cb);
-    function go$appendFile(path22, data2, options2, cb2, startTime) {
-      return fs$appendFile(path22, data2, options2, function(err) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([go$appendFile, [path22, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
-        else {
-          if (typeof cb2 === "function")
-            cb2.apply(this, arguments);
-        }
-      });
-    }
-  }
-  var fs$copyFile = fs2.copyFile;
-  if (fs$copyFile)
-    fs2.copyFile = copyFile2;
-  function copyFile2(src2, dest, flags, cb) {
-    if (typeof flags === "function") {
-      cb = flags;
-      flags = 0;
-    }
-    return go$copyFile(src2, dest, flags, cb);
-    function go$copyFile(src22, dest2, flags2, cb2, startTime) {
-      return fs$copyFile(src22, dest2, flags2, function(err) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([go$copyFile, [src22, dest2, flags2, cb2], err, startTime || Date.now(), Date.now()]);
-        else {
-          if (typeof cb2 === "function")
-            cb2.apply(this, arguments);
-        }
-      });
-    }
-  }
-  var fs$readdir = fs2.readdir;
-  fs2.readdir = readdir;
-  var noReaddirOptionVersions = /^v[0-5]\./;
-  function readdir(path2, options, cb) {
-    if (typeof options === "function")
-      cb = options, options = null;
-    var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path22, options2, cb2, startTime) {
-      return fs$readdir(path22, fs$readdirCallback(
-        path22,
-        options2,
-        cb2,
-        startTime
-      ));
-    } : function go$readdir2(path22, options2, cb2, startTime) {
-      return fs$readdir(path22, options2, fs$readdirCallback(
-        path22,
-        options2,
-        cb2,
-        startTime
-      ));
-    };
-    return go$readdir(path2, options, cb);
-    function fs$readdirCallback(path22, options2, cb2, startTime) {
-      return function(err, files) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([
-            go$readdir,
-            [path22, options2, cb2],
-            err,
-            startTime || Date.now(),
-            Date.now()
-          ]);
-        else {
-          if (files && files.sort)
-            files.sort();
-          if (typeof cb2 === "function")
-            cb2.call(this, err, files);
-        }
-      };
-    }
-  }
-  if (process.version.substr(0, 4) === "v0.8") {
-    var legStreams = legacy(fs2);
-    ReadStream = legStreams.ReadStream;
-    WriteStream = legStreams.WriteStream;
-  }
-  var fs$ReadStream = fs2.ReadStream;
-  if (fs$ReadStream) {
-    ReadStream.prototype = Object.create(fs$ReadStream.prototype);
-    ReadStream.prototype.open = ReadStream$open;
-  }
-  var fs$WriteStream = fs2.WriteStream;
-  if (fs$WriteStream) {
-    WriteStream.prototype = Object.create(fs$WriteStream.prototype);
-    WriteStream.prototype.open = WriteStream$open;
-  }
-  Object.defineProperty(fs2, "ReadStream", {
-    get: function() {
-      return ReadStream;
-    },
-    set: function(val) {
-      ReadStream = val;
-    },
-    enumerable: true,
-    configurable: true
-  });
-  Object.defineProperty(fs2, "WriteStream", {
-    get: function() {
-      return WriteStream;
-    },
-    set: function(val) {
-      WriteStream = val;
-    },
-    enumerable: true,
-    configurable: true
-  });
-  var FileReadStream = ReadStream;
-  Object.defineProperty(fs2, "FileReadStream", {
-    get: function() {
-      return FileReadStream;
-    },
-    set: function(val) {
-      FileReadStream = val;
-    },
-    enumerable: true,
-    configurable: true
-  });
-  var FileWriteStream = WriteStream;
-  Object.defineProperty(fs2, "FileWriteStream", {
-    get: function() {
-      return FileWriteStream;
-    },
-    set: function(val) {
-      FileWriteStream = val;
-    },
-    enumerable: true,
-    configurable: true
-  });
-  function ReadStream(path2, options) {
-    if (this instanceof ReadStream)
-      return fs$ReadStream.apply(this, arguments), this;
-    else
-      return ReadStream.apply(Object.create(ReadStream.prototype), arguments);
-  }
-  function ReadStream$open() {
-    var that = this;
-    open(that.path, that.flags, that.mode, function(err, fd) {
-      if (err) {
-        if (that.autoClose)
-          that.destroy();
-        that.emit("error", err);
-      } else {
-        that.fd = fd;
-        that.emit("open", fd);
-        that.read();
-      }
-    });
-  }
-  function WriteStream(path2, options) {
-    if (this instanceof WriteStream)
-      return fs$WriteStream.apply(this, arguments), this;
-    else
-      return WriteStream.apply(Object.create(WriteStream.prototype), arguments);
-  }
-  function WriteStream$open() {
-    var that = this;
-    open(that.path, that.flags, that.mode, function(err, fd) {
-      if (err) {
-        that.destroy();
-        that.emit("error", err);
-      } else {
-        that.fd = fd;
-        that.emit("open", fd);
-      }
-    });
-  }
-  function createReadStream(path2, options) {
-    return new fs2.ReadStream(path2, options);
-  }
-  function createWriteStream2(path2, options) {
-    return new fs2.WriteStream(path2, options);
-  }
-  var fs$open = fs2.open;
-  fs2.open = open;
-  function open(path2, flags, mode, cb) {
-    if (typeof mode === "function")
-      cb = mode, mode = null;
-    return go$open(path2, flags, mode, cb);
-    function go$open(path22, flags2, mode2, cb2, startTime) {
-      return fs$open(path22, flags2, mode2, function(err, fd) {
-        if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-          enqueue([go$open, [path22, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
-        else {
-          if (typeof cb2 === "function")
-            cb2.apply(this, arguments);
-        }
-      });
-    }
-  }
-  return fs2;
-}
-function enqueue(elem) {
-  debug$2("ENQUEUE", elem[0].name, elem[1]);
-  fs$h[gracefulQueue].push(elem);
-  retry();
-}
-var retryTimer;
-function resetQueue() {
-  var now = Date.now();
-  for (var i = 0; i < fs$h[gracefulQueue].length; ++i) {
-    if (fs$h[gracefulQueue][i].length > 2) {
-      fs$h[gracefulQueue][i][3] = now;
-      fs$h[gracefulQueue][i][4] = now;
-    }
-  }
-  retry();
-}
-function retry() {
-  clearTimeout(retryTimer);
-  retryTimer = void 0;
-  if (fs$h[gracefulQueue].length === 0)
-    return;
-  var elem = fs$h[gracefulQueue].shift();
-  var fn = elem[0];
-  var args = elem[1];
-  var err = elem[2];
-  var startTime = elem[3];
-  var lastTime = elem[4];
-  if (startTime === void 0) {
-    debug$2("RETRY", fn.name, args);
-    fn.apply(null, args);
-  } else if (Date.now() - startTime >= 6e4) {
-    debug$2("TIMEOUT", fn.name, args);
-    var cb = args.pop();
-    if (typeof cb === "function")
-      cb.call(null, err);
-  } else {
-    var sinceAttempt = Date.now() - lastTime;
-    var sinceStart = Math.max(lastTime - startTime, 1);
-    var desiredDelay = Math.min(sinceStart * 1.2, 100);
-    if (sinceAttempt >= desiredDelay) {
-      debug$2("RETRY", fn.name, args);
-      fn.apply(null, args.concat([startTime]));
-    } else {
-      fs$h[gracefulQueue].push(elem);
-    }
-  }
-  if (retryTimer === void 0) {
-    retryTimer = setTimeout(retry, 0);
-  }
-}
-(function(exports) {
-  const u2 = universalify$1.fromCallback;
-  const fs2 = gracefulFs;
-  const api = [
-    "access",
-    "appendFile",
-    "chmod",
-    "chown",
-    "close",
-    "copyFile",
-    "fchmod",
-    "fchown",
-    "fdatasync",
-    "fstat",
-    "fsync",
-    "ftruncate",
-    "futimes",
-    "lchmod",
-    "lchown",
-    "link",
-    "lstat",
-    "mkdir",
-    "mkdtemp",
-    "open",
-    "opendir",
-    "readdir",
-    "readFile",
-    "readlink",
-    "realpath",
-    "rename",
-    "rm",
-    "rmdir",
-    "stat",
-    "symlink",
-    "truncate",
-    "unlink",
-    "utimes",
-    "writeFile"
-  ].filter((key) => {
-    return typeof fs2[key] === "function";
-  });
-  Object.assign(exports, fs2);
-  api.forEach((method) => {
-    exports[method] = u2(fs2[method]);
-  });
-  exports.exists = function(filename, callback) {
-    if (typeof callback === "function") {
-      return fs2.exists(filename, callback);
-    }
-    return new Promise((resolve) => {
-      return fs2.exists(filename, resolve);
-    });
-  };
-  exports.read = function(fd, buffer, offset, length, position, callback) {
-    if (typeof callback === "function") {
-      return fs2.read(fd, buffer, offset, length, position, callback);
-    }
-    return new Promise((resolve, reject) => {
-      fs2.read(fd, buffer, offset, length, position, (err, bytesRead, buffer2) => {
-        if (err) return reject(err);
-        resolve({ bytesRead, buffer: buffer2 });
-      });
-    });
-  };
-  exports.write = function(fd, buffer, ...args) {
-    if (typeof args[args.length - 1] === "function") {
-      return fs2.write(fd, buffer, ...args);
-    }
-    return new Promise((resolve, reject) => {
-      fs2.write(fd, buffer, ...args, (err, bytesWritten, buffer2) => {
-        if (err) return reject(err);
-        resolve({ bytesWritten, buffer: buffer2 });
-      });
-    });
-  };
-  if (typeof fs2.writev === "function") {
-    exports.writev = function(fd, buffers, ...args) {
-      if (typeof args[args.length - 1] === "function") {
-        return fs2.writev(fd, buffers, ...args);
-      }
-      return new Promise((resolve, reject) => {
-        fs2.writev(fd, buffers, ...args, (err, bytesWritten, buffers2) => {
-          if (err) return reject(err);
-          resolve({ bytesWritten, buffers: buffers2 });
-        });
-      });
-    };
-  }
-  if (typeof fs2.realpath.native === "function") {
-    exports.realpath.native = u2(fs2.realpath.native);
-  } else {
-    process.emitWarning(
-      "fs.realpath.native is not a function. Is fs being monkey-patched?",
-      "Warning",
-      "fs-extra-WARN0003"
-    );
-  }
-})(fs$i);
-var makeDir$1 = {};
-var utils$1 = {};
-const path$h = require$$1$4;
-utils$1.checkPath = function checkPath(pth) {
-  if (process.platform === "win32") {
-    const pathHasInvalidWinCharacters = /[<>:"|?*]/.test(pth.replace(path$h.parse(pth).root, ""));
-    if (pathHasInvalidWinCharacters) {
-      const error2 = new Error(`Path contains invalid characters: ${pth}`);
-      error2.code = "EINVAL";
-      throw error2;
-    }
-  }
-};
-const fs$g = fs$i;
-const { checkPath: checkPath2 } = utils$1;
-const getMode = (options) => {
-  const defaults2 = { mode: 511 };
-  if (typeof options === "number") return options;
-  return { ...defaults2, ...options }.mode;
-};
-makeDir$1.makeDir = async (dir, options) => {
-  checkPath2(dir);
-  return fs$g.mkdir(dir, {
-    mode: getMode(options),
-    recursive: true
-  });
-};
-makeDir$1.makeDirSync = (dir, options) => {
-  checkPath2(dir);
-  return fs$g.mkdirSync(dir, {
-    mode: getMode(options),
-    recursive: true
-  });
-};
-const u$a = universalify$1.fromPromise;
-const { makeDir: _makeDir, makeDirSync } = makeDir$1;
-const makeDir = u$a(_makeDir);
-var mkdirs$2 = {
-  mkdirs: makeDir,
-  mkdirsSync: makeDirSync,
-  // alias
-  mkdirp: makeDir,
-  mkdirpSync: makeDirSync,
-  ensureDir: makeDir,
-  ensureDirSync: makeDirSync
-};
-const u$9 = universalify$1.fromPromise;
-const fs$f = fs$i;
-function pathExists$6(path2) {
-  return fs$f.access(path2).then(() => true).catch(() => false);
-}
-var pathExists_1 = {
-  pathExists: u$9(pathExists$6),
-  pathExistsSync: fs$f.existsSync
-};
-const fs$e = gracefulFs;
-function utimesMillis$1(path2, atime, mtime, callback) {
-  fs$e.open(path2, "r+", (err, fd) => {
-    if (err) return callback(err);
-    fs$e.futimes(fd, atime, mtime, (futimesErr) => {
-      fs$e.close(fd, (closeErr) => {
-        if (callback) callback(futimesErr || closeErr);
-      });
-    });
-  });
-}
-function utimesMillisSync$1(path2, atime, mtime) {
-  const fd = fs$e.openSync(path2, "r+");
-  fs$e.futimesSync(fd, atime, mtime);
-  return fs$e.closeSync(fd);
-}
-var utimes = {
-  utimesMillis: utimesMillis$1,
-  utimesMillisSync: utimesMillisSync$1
-};
-const fs$d = fs$i;
-const path$g = require$$1$4;
-const util$1 = require$$1$1;
-function getStats$2(src2, dest, opts) {
-  const statFunc = opts.dereference ? (file2) => fs$d.stat(file2, { bigint: true }) : (file2) => fs$d.lstat(file2, { bigint: true });
-  return Promise.all([
-    statFunc(src2),
-    statFunc(dest).catch((err) => {
-      if (err.code === "ENOENT") return null;
-      throw err;
-    })
-  ]).then(([srcStat, destStat]) => ({ srcStat, destStat }));
-}
-function getStatsSync(src2, dest, opts) {
-  let destStat;
-  const statFunc = opts.dereference ? (file2) => fs$d.statSync(file2, { bigint: true }) : (file2) => fs$d.lstatSync(file2, { bigint: true });
-  const srcStat = statFunc(src2);
-  try {
-    destStat = statFunc(dest);
-  } catch (err) {
-    if (err.code === "ENOENT") return { srcStat, destStat: null };
-    throw err;
-  }
-  return { srcStat, destStat };
-}
-function checkPaths(src2, dest, funcName, opts, cb) {
-  util$1.callbackify(getStats$2)(src2, dest, opts, (err, stats) => {
-    if (err) return cb(err);
-    const { srcStat, destStat } = stats;
-    if (destStat) {
-      if (areIdentical$2(srcStat, destStat)) {
-        const srcBaseName = path$g.basename(src2);
-        const destBaseName = path$g.basename(dest);
-        if (funcName === "move" && srcBaseName !== destBaseName && srcBaseName.toLowerCase() === destBaseName.toLowerCase()) {
-          return cb(null, { srcStat, destStat, isChangingCase: true });
-        }
-        return cb(new Error("Source and destination must not be the same."));
-      }
-      if (srcStat.isDirectory() && !destStat.isDirectory()) {
-        return cb(new Error(`Cannot overwrite non-directory '${dest}' with directory '${src2}'.`));
-      }
-      if (!srcStat.isDirectory() && destStat.isDirectory()) {
-        return cb(new Error(`Cannot overwrite directory '${dest}' with non-directory '${src2}'.`));
-      }
-    }
-    if (srcStat.isDirectory() && isSrcSubdir(src2, dest)) {
-      return cb(new Error(errMsg(src2, dest, funcName)));
-    }
-    return cb(null, { srcStat, destStat });
-  });
-}
-function checkPathsSync(src2, dest, funcName, opts) {
-  const { srcStat, destStat } = getStatsSync(src2, dest, opts);
-  if (destStat) {
-    if (areIdentical$2(srcStat, destStat)) {
-      const srcBaseName = path$g.basename(src2);
-      const destBaseName = path$g.basename(dest);
-      if (funcName === "move" && srcBaseName !== destBaseName && srcBaseName.toLowerCase() === destBaseName.toLowerCase()) {
-        return { srcStat, destStat, isChangingCase: true };
-      }
-      throw new Error("Source and destination must not be the same.");
-    }
-    if (srcStat.isDirectory() && !destStat.isDirectory()) {
-      throw new Error(`Cannot overwrite non-directory '${dest}' with directory '${src2}'.`);
-    }
-    if (!srcStat.isDirectory() && destStat.isDirectory()) {
-      throw new Error(`Cannot overwrite directory '${dest}' with non-directory '${src2}'.`);
-    }
-  }
-  if (srcStat.isDirectory() && isSrcSubdir(src2, dest)) {
-    throw new Error(errMsg(src2, dest, funcName));
-  }
-  return { srcStat, destStat };
-}
-function checkParentPaths(src2, srcStat, dest, funcName, cb) {
-  const srcParent = path$g.resolve(path$g.dirname(src2));
-  const destParent = path$g.resolve(path$g.dirname(dest));
-  if (destParent === srcParent || destParent === path$g.parse(destParent).root) return cb();
-  fs$d.stat(destParent, { bigint: true }, (err, destStat) => {
-    if (err) {
-      if (err.code === "ENOENT") return cb();
-      return cb(err);
-    }
-    if (areIdentical$2(srcStat, destStat)) {
-      return cb(new Error(errMsg(src2, dest, funcName)));
-    }
-    return checkParentPaths(src2, srcStat, destParent, funcName, cb);
-  });
-}
-function checkParentPathsSync(src2, srcStat, dest, funcName) {
-  const srcParent = path$g.resolve(path$g.dirname(src2));
-  const destParent = path$g.resolve(path$g.dirname(dest));
-  if (destParent === srcParent || destParent === path$g.parse(destParent).root) return;
-  let destStat;
-  try {
-    destStat = fs$d.statSync(destParent, { bigint: true });
-  } catch (err) {
-    if (err.code === "ENOENT") return;
-    throw err;
-  }
-  if (areIdentical$2(srcStat, destStat)) {
-    throw new Error(errMsg(src2, dest, funcName));
-  }
-  return checkParentPathsSync(src2, srcStat, destParent, funcName);
-}
-function areIdentical$2(srcStat, destStat) {
-  return destStat.ino && destStat.dev && destStat.ino === srcStat.ino && destStat.dev === srcStat.dev;
-}
-function isSrcSubdir(src2, dest) {
-  const srcArr = path$g.resolve(src2).split(path$g.sep).filter((i) => i);
-  const destArr = path$g.resolve(dest).split(path$g.sep).filter((i) => i);
-  return srcArr.reduce((acc, cur, i) => acc && destArr[i] === cur, true);
-}
-function errMsg(src2, dest, funcName) {
-  return `Cannot ${funcName} '${src2}' to a subdirectory of itself, '${dest}'.`;
-}
-var stat$4 = {
-  checkPaths,
-  checkPathsSync,
-  checkParentPaths,
-  checkParentPathsSync,
-  isSrcSubdir,
-  areIdentical: areIdentical$2
-};
-const fs$c = gracefulFs;
-const path$f = require$$1$4;
-const mkdirs$1 = mkdirs$2.mkdirs;
-const pathExists$5 = pathExists_1.pathExists;
-const utimesMillis = utimes.utimesMillis;
-const stat$3 = stat$4;
-function copy$2(src2, dest, opts, cb) {
-  if (typeof opts === "function" && !cb) {
-    cb = opts;
-    opts = {};
-  } else if (typeof opts === "function") {
-    opts = { filter: opts };
-  }
-  cb = cb || function() {
-  };
-  opts = opts || {};
-  opts.clobber = "clobber" in opts ? !!opts.clobber : true;
-  opts.overwrite = "overwrite" in opts ? !!opts.overwrite : opts.clobber;
-  if (opts.preserveTimestamps && process.arch === "ia32") {
-    process.emitWarning(
-      "Using the preserveTimestamps option in 32-bit node is not recommended;\n\n	see https://github.com/jprichardson/node-fs-extra/issues/269",
-      "Warning",
-      "fs-extra-WARN0001"
-    );
-  }
-  stat$3.checkPaths(src2, dest, "copy", opts, (err, stats) => {
-    if (err) return cb(err);
-    const { srcStat, destStat } = stats;
-    stat$3.checkParentPaths(src2, srcStat, dest, "copy", (err2) => {
-      if (err2) return cb(err2);
-      if (opts.filter) return handleFilter(checkParentDir, destStat, src2, dest, opts, cb);
-      return checkParentDir(destStat, src2, dest, opts, cb);
-    });
-  });
-}
-function checkParentDir(destStat, src2, dest, opts, cb) {
-  const destParent = path$f.dirname(dest);
-  pathExists$5(destParent, (err, dirExists) => {
-    if (err) return cb(err);
-    if (dirExists) return getStats$1(destStat, src2, dest, opts, cb);
-    mkdirs$1(destParent, (err2) => {
-      if (err2) return cb(err2);
-      return getStats$1(destStat, src2, dest, opts, cb);
-    });
-  });
-}
-function handleFilter(onInclude, destStat, src2, dest, opts, cb) {
-  Promise.resolve(opts.filter(src2, dest)).then((include) => {
-    if (include) return onInclude(destStat, src2, dest, opts, cb);
-    return cb();
-  }, (error2) => cb(error2));
-}
-function startCopy$1(destStat, src2, dest, opts, cb) {
-  if (opts.filter) return handleFilter(getStats$1, destStat, src2, dest, opts, cb);
-  return getStats$1(destStat, src2, dest, opts, cb);
-}
-function getStats$1(destStat, src2, dest, opts, cb) {
-  const stat2 = opts.dereference ? fs$c.stat : fs$c.lstat;
-  stat2(src2, (err, srcStat) => {
-    if (err) return cb(err);
-    if (srcStat.isDirectory()) return onDir$1(srcStat, destStat, src2, dest, opts, cb);
-    else if (srcStat.isFile() || srcStat.isCharacterDevice() || srcStat.isBlockDevice()) return onFile$1(srcStat, destStat, src2, dest, opts, cb);
-    else if (srcStat.isSymbolicLink()) return onLink$1(destStat, src2, dest, opts, cb);
-    else if (srcStat.isSocket()) return cb(new Error(`Cannot copy a socket file: ${src2}`));
-    else if (srcStat.isFIFO()) return cb(new Error(`Cannot copy a FIFO pipe: ${src2}`));
-    return cb(new Error(`Unknown file: ${src2}`));
-  });
-}
-function onFile$1(srcStat, destStat, src2, dest, opts, cb) {
-  if (!destStat) return copyFile$1(srcStat, src2, dest, opts, cb);
-  return mayCopyFile$1(srcStat, src2, dest, opts, cb);
-}
-function mayCopyFile$1(srcStat, src2, dest, opts, cb) {
-  if (opts.overwrite) {
-    fs$c.unlink(dest, (err) => {
-      if (err) return cb(err);
-      return copyFile$1(srcStat, src2, dest, opts, cb);
-    });
-  } else if (opts.errorOnExist) {
-    return cb(new Error(`'${dest}' already exists`));
-  } else return cb();
-}
-function copyFile$1(srcStat, src2, dest, opts, cb) {
-  fs$c.copyFile(src2, dest, (err) => {
-    if (err) return cb(err);
-    if (opts.preserveTimestamps) return handleTimestampsAndMode(srcStat.mode, src2, dest, cb);
-    return setDestMode$1(dest, srcStat.mode, cb);
-  });
-}
-function handleTimestampsAndMode(srcMode, src2, dest, cb) {
-  if (fileIsNotWritable$1(srcMode)) {
-    return makeFileWritable$1(dest, srcMode, (err) => {
-      if (err) return cb(err);
-      return setDestTimestampsAndMode(srcMode, src2, dest, cb);
-    });
-  }
-  return setDestTimestampsAndMode(srcMode, src2, dest, cb);
-}
-function fileIsNotWritable$1(srcMode) {
-  return (srcMode & 128) === 0;
-}
-function makeFileWritable$1(dest, srcMode, cb) {
-  return setDestMode$1(dest, srcMode | 128, cb);
-}
-function setDestTimestampsAndMode(srcMode, src2, dest, cb) {
-  setDestTimestamps$1(src2, dest, (err) => {
-    if (err) return cb(err);
-    return setDestMode$1(dest, srcMode, cb);
-  });
-}
-function setDestMode$1(dest, srcMode, cb) {
-  return fs$c.chmod(dest, srcMode, cb);
-}
-function setDestTimestamps$1(src2, dest, cb) {
-  fs$c.stat(src2, (err, updatedSrcStat) => {
-    if (err) return cb(err);
-    return utimesMillis(dest, updatedSrcStat.atime, updatedSrcStat.mtime, cb);
-  });
-}
-function onDir$1(srcStat, destStat, src2, dest, opts, cb) {
-  if (!destStat) return mkDirAndCopy$1(srcStat.mode, src2, dest, opts, cb);
-  return copyDir$1(src2, dest, opts, cb);
-}
-function mkDirAndCopy$1(srcMode, src2, dest, opts, cb) {
-  fs$c.mkdir(dest, (err) => {
-    if (err) return cb(err);
-    copyDir$1(src2, dest, opts, (err2) => {
-      if (err2) return cb(err2);
-      return setDestMode$1(dest, srcMode, cb);
-    });
-  });
-}
-function copyDir$1(src2, dest, opts, cb) {
-  fs$c.readdir(src2, (err, items) => {
-    if (err) return cb(err);
-    return copyDirItems(items, src2, dest, opts, cb);
-  });
-}
-function copyDirItems(items, src2, dest, opts, cb) {
-  const item = items.pop();
-  if (!item) return cb();
-  return copyDirItem$1(items, item, src2, dest, opts, cb);
-}
-function copyDirItem$1(items, item, src2, dest, opts, cb) {
-  const srcItem = path$f.join(src2, item);
-  const destItem = path$f.join(dest, item);
-  stat$3.checkPaths(srcItem, destItem, "copy", opts, (err, stats) => {
-    if (err) return cb(err);
-    const { destStat } = stats;
-    startCopy$1(destStat, srcItem, destItem, opts, (err2) => {
-      if (err2) return cb(err2);
-      return copyDirItems(items, src2, dest, opts, cb);
-    });
-  });
-}
-function onLink$1(destStat, src2, dest, opts, cb) {
-  fs$c.readlink(src2, (err, resolvedSrc) => {
-    if (err) return cb(err);
-    if (opts.dereference) {
-      resolvedSrc = path$f.resolve(process.cwd(), resolvedSrc);
-    }
-    if (!destStat) {
-      return fs$c.symlink(resolvedSrc, dest, cb);
-    } else {
-      fs$c.readlink(dest, (err2, resolvedDest) => {
-        if (err2) {
-          if (err2.code === "EINVAL" || err2.code === "UNKNOWN") return fs$c.symlink(resolvedSrc, dest, cb);
-          return cb(err2);
-        }
-        if (opts.dereference) {
-          resolvedDest = path$f.resolve(process.cwd(), resolvedDest);
-        }
-        if (stat$3.isSrcSubdir(resolvedSrc, resolvedDest)) {
-          return cb(new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`));
-        }
-        if (destStat.isDirectory() && stat$3.isSrcSubdir(resolvedDest, resolvedSrc)) {
-          return cb(new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`));
-        }
-        return copyLink$1(resolvedSrc, dest, cb);
-      });
-    }
-  });
-}
-function copyLink$1(resolvedSrc, dest, cb) {
-  fs$c.unlink(dest, (err) => {
-    if (err) return cb(err);
-    return fs$c.symlink(resolvedSrc, dest, cb);
-  });
-}
-var copy_1 = copy$2;
-const fs$b = gracefulFs;
-const path$e = require$$1$4;
-const mkdirsSync$1 = mkdirs$2.mkdirsSync;
-const utimesMillisSync = utimes.utimesMillisSync;
-const stat$2 = stat$4;
-function copySync$1(src2, dest, opts) {
-  if (typeof opts === "function") {
-    opts = { filter: opts };
-  }
-  opts = opts || {};
-  opts.clobber = "clobber" in opts ? !!opts.clobber : true;
-  opts.overwrite = "overwrite" in opts ? !!opts.overwrite : opts.clobber;
-  if (opts.preserveTimestamps && process.arch === "ia32") {
-    process.emitWarning(
-      "Using the preserveTimestamps option in 32-bit node is not recommended;\n\n	see https://github.com/jprichardson/node-fs-extra/issues/269",
-      "Warning",
-      "fs-extra-WARN0002"
-    );
-  }
-  const { srcStat, destStat } = stat$2.checkPathsSync(src2, dest, "copy", opts);
-  stat$2.checkParentPathsSync(src2, srcStat, dest, "copy");
-  return handleFilterAndCopy(destStat, src2, dest, opts);
-}
-function handleFilterAndCopy(destStat, src2, dest, opts) {
-  if (opts.filter && !opts.filter(src2, dest)) return;
-  const destParent = path$e.dirname(dest);
-  if (!fs$b.existsSync(destParent)) mkdirsSync$1(destParent);
-  return getStats(destStat, src2, dest, opts);
-}
-function startCopy(destStat, src2, dest, opts) {
-  if (opts.filter && !opts.filter(src2, dest)) return;
-  return getStats(destStat, src2, dest, opts);
-}
-function getStats(destStat, src2, dest, opts) {
-  const statSync = opts.dereference ? fs$b.statSync : fs$b.lstatSync;
-  const srcStat = statSync(src2);
-  if (srcStat.isDirectory()) return onDir(srcStat, destStat, src2, dest, opts);
-  else if (srcStat.isFile() || srcStat.isCharacterDevice() || srcStat.isBlockDevice()) return onFile(srcStat, destStat, src2, dest, opts);
-  else if (srcStat.isSymbolicLink()) return onLink(destStat, src2, dest, opts);
-  else if (srcStat.isSocket()) throw new Error(`Cannot copy a socket file: ${src2}`);
-  else if (srcStat.isFIFO()) throw new Error(`Cannot copy a FIFO pipe: ${src2}`);
-  throw new Error(`Unknown file: ${src2}`);
-}
-function onFile(srcStat, destStat, src2, dest, opts) {
-  if (!destStat) return copyFile(srcStat, src2, dest, opts);
-  return mayCopyFile(srcStat, src2, dest, opts);
-}
-function mayCopyFile(srcStat, src2, dest, opts) {
-  if (opts.overwrite) {
-    fs$b.unlinkSync(dest);
-    return copyFile(srcStat, src2, dest, opts);
-  } else if (opts.errorOnExist) {
-    throw new Error(`'${dest}' already exists`);
-  }
-}
-function copyFile(srcStat, src2, dest, opts) {
-  fs$b.copyFileSync(src2, dest);
-  if (opts.preserveTimestamps) handleTimestamps(srcStat.mode, src2, dest);
-  return setDestMode(dest, srcStat.mode);
-}
-function handleTimestamps(srcMode, src2, dest) {
-  if (fileIsNotWritable(srcMode)) makeFileWritable(dest, srcMode);
-  return setDestTimestamps(src2, dest);
-}
-function fileIsNotWritable(srcMode) {
-  return (srcMode & 128) === 0;
-}
-function makeFileWritable(dest, srcMode) {
-  return setDestMode(dest, srcMode | 128);
-}
-function setDestMode(dest, srcMode) {
-  return fs$b.chmodSync(dest, srcMode);
-}
-function setDestTimestamps(src2, dest) {
-  const updatedSrcStat = fs$b.statSync(src2);
-  return utimesMillisSync(dest, updatedSrcStat.atime, updatedSrcStat.mtime);
-}
-function onDir(srcStat, destStat, src2, dest, opts) {
-  if (!destStat) return mkDirAndCopy(srcStat.mode, src2, dest, opts);
-  return copyDir(src2, dest, opts);
-}
-function mkDirAndCopy(srcMode, src2, dest, opts) {
-  fs$b.mkdirSync(dest);
-  copyDir(src2, dest, opts);
-  return setDestMode(dest, srcMode);
-}
-function copyDir(src2, dest, opts) {
-  fs$b.readdirSync(src2).forEach((item) => copyDirItem(item, src2, dest, opts));
-}
-function copyDirItem(item, src2, dest, opts) {
-  const srcItem = path$e.join(src2, item);
-  const destItem = path$e.join(dest, item);
-  const { destStat } = stat$2.checkPathsSync(srcItem, destItem, "copy", opts);
-  return startCopy(destStat, srcItem, destItem, opts);
-}
-function onLink(destStat, src2, dest, opts) {
-  let resolvedSrc = fs$b.readlinkSync(src2);
-  if (opts.dereference) {
-    resolvedSrc = path$e.resolve(process.cwd(), resolvedSrc);
-  }
-  if (!destStat) {
-    return fs$b.symlinkSync(resolvedSrc, dest);
-  } else {
-    let resolvedDest;
-    try {
-      resolvedDest = fs$b.readlinkSync(dest);
-    } catch (err) {
-      if (err.code === "EINVAL" || err.code === "UNKNOWN") return fs$b.symlinkSync(resolvedSrc, dest);
-      throw err;
-    }
-    if (opts.dereference) {
-      resolvedDest = path$e.resolve(process.cwd(), resolvedDest);
-    }
-    if (stat$2.isSrcSubdir(resolvedSrc, resolvedDest)) {
-      throw new Error(`Cannot copy '${resolvedSrc}' to a subdirectory of itself, '${resolvedDest}'.`);
-    }
-    if (fs$b.statSync(dest).isDirectory() && stat$2.isSrcSubdir(resolvedDest, resolvedSrc)) {
-      throw new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`);
-    }
-    return copyLink(resolvedSrc, dest);
-  }
-}
-function copyLink(resolvedSrc, dest) {
-  fs$b.unlinkSync(dest);
-  return fs$b.symlinkSync(resolvedSrc, dest);
-}
-var copySync_1 = copySync$1;
-const u$8 = universalify$1.fromCallback;
-var copy$1 = {
-  copy: u$8(copy_1),
-  copySync: copySync_1
-};
-const fs$a = gracefulFs;
-const path$d = require$$1$4;
-const assert = require$$5;
-const isWindows = process.platform === "win32";
-function defaults(options) {
-  const methods = [
-    "unlink",
-    "chmod",
-    "stat",
-    "lstat",
-    "rmdir",
-    "readdir"
-  ];
-  methods.forEach((m) => {
-    options[m] = options[m] || fs$a[m];
-    m = m + "Sync";
-    options[m] = options[m] || fs$a[m];
-  });
-  options.maxBusyTries = options.maxBusyTries || 3;
-}
-function rimraf$1(p, options, cb) {
-  let busyTries = 0;
-  if (typeof options === "function") {
-    cb = options;
-    options = {};
-  }
-  assert(p, "rimraf: missing path");
-  assert.strictEqual(typeof p, "string", "rimraf: path should be a string");
-  assert.strictEqual(typeof cb, "function", "rimraf: callback function required");
-  assert(options, "rimraf: invalid options argument provided");
-  assert.strictEqual(typeof options, "object", "rimraf: options should be object");
-  defaults(options);
-  rimraf_(p, options, function CB(er) {
-    if (er) {
-      if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") && busyTries < options.maxBusyTries) {
-        busyTries++;
-        const time = busyTries * 100;
-        return setTimeout(() => rimraf_(p, options, CB), time);
-      }
-      if (er.code === "ENOENT") er = null;
-    }
-    cb(er);
-  });
-}
-function rimraf_(p, options, cb) {
-  assert(p);
-  assert(options);
-  assert(typeof cb === "function");
-  options.lstat(p, (er, st) => {
-    if (er && er.code === "ENOENT") {
-      return cb(null);
-    }
-    if (er && er.code === "EPERM" && isWindows) {
-      return fixWinEPERM(p, options, er, cb);
-    }
-    if (st && st.isDirectory()) {
-      return rmdir(p, options, er, cb);
-    }
-    options.unlink(p, (er2) => {
-      if (er2) {
-        if (er2.code === "ENOENT") {
-          return cb(null);
-        }
-        if (er2.code === "EPERM") {
-          return isWindows ? fixWinEPERM(p, options, er2, cb) : rmdir(p, options, er2, cb);
-        }
-        if (er2.code === "EISDIR") {
-          return rmdir(p, options, er2, cb);
-        }
-      }
-      return cb(er2);
-    });
-  });
-}
-function fixWinEPERM(p, options, er, cb) {
-  assert(p);
-  assert(options);
-  assert(typeof cb === "function");
-  options.chmod(p, 438, (er2) => {
-    if (er2) {
-      cb(er2.code === "ENOENT" ? null : er);
-    } else {
-      options.stat(p, (er3, stats) => {
-        if (er3) {
-          cb(er3.code === "ENOENT" ? null : er);
-        } else if (stats.isDirectory()) {
-          rmdir(p, options, er, cb);
-        } else {
-          options.unlink(p, cb);
-        }
-      });
-    }
-  });
-}
-function fixWinEPERMSync(p, options, er) {
-  let stats;
-  assert(p);
-  assert(options);
-  try {
-    options.chmodSync(p, 438);
-  } catch (er2) {
-    if (er2.code === "ENOENT") {
-      return;
-    } else {
-      throw er;
-    }
-  }
-  try {
-    stats = options.statSync(p);
-  } catch (er3) {
-    if (er3.code === "ENOENT") {
-      return;
-    } else {
-      throw er;
-    }
-  }
-  if (stats.isDirectory()) {
-    rmdirSync(p, options, er);
-  } else {
-    options.unlinkSync(p);
-  }
-}
-function rmdir(p, options, originalEr, cb) {
-  assert(p);
-  assert(options);
-  assert(typeof cb === "function");
-  options.rmdir(p, (er) => {
-    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")) {
-      rmkids(p, options, cb);
-    } else if (er && er.code === "ENOTDIR") {
-      cb(originalEr);
-    } else {
-      cb(er);
-    }
-  });
-}
-function rmkids(p, options, cb) {
-  assert(p);
-  assert(options);
-  assert(typeof cb === "function");
-  options.readdir(p, (er, files) => {
-    if (er) return cb(er);
-    let n = files.length;
-    let errState;
-    if (n === 0) return options.rmdir(p, cb);
-    files.forEach((f) => {
-      rimraf$1(path$d.join(p, f), options, (er2) => {
-        if (errState) {
-          return;
-        }
-        if (er2) return cb(errState = er2);
-        if (--n === 0) {
-          options.rmdir(p, cb);
-        }
-      });
-    });
-  });
-}
-function rimrafSync(p, options) {
-  let st;
-  options = options || {};
-  defaults(options);
-  assert(p, "rimraf: missing path");
-  assert.strictEqual(typeof p, "string", "rimraf: path should be a string");
-  assert(options, "rimraf: missing options");
-  assert.strictEqual(typeof options, "object", "rimraf: options should be object");
-  try {
-    st = options.lstatSync(p);
-  } catch (er) {
-    if (er.code === "ENOENT") {
-      return;
-    }
-    if (er.code === "EPERM" && isWindows) {
-      fixWinEPERMSync(p, options, er);
-    }
-  }
-  try {
-    if (st && st.isDirectory()) {
-      rmdirSync(p, options, null);
-    } else {
-      options.unlinkSync(p);
-    }
-  } catch (er) {
-    if (er.code === "ENOENT") {
-      return;
-    } else if (er.code === "EPERM") {
-      return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er);
-    } else if (er.code !== "EISDIR") {
-      throw er;
-    }
-    rmdirSync(p, options, er);
-  }
-}
-function rmdirSync(p, options, originalEr) {
-  assert(p);
-  assert(options);
-  try {
-    options.rmdirSync(p);
-  } catch (er) {
-    if (er.code === "ENOTDIR") {
-      throw originalEr;
-    } else if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM") {
-      rmkidsSync(p, options);
-    } else if (er.code !== "ENOENT") {
-      throw er;
-    }
-  }
-}
-function rmkidsSync(p, options) {
-  assert(p);
-  assert(options);
-  options.readdirSync(p).forEach((f) => rimrafSync(path$d.join(p, f), options));
-  if (isWindows) {
-    const startTime = Date.now();
-    do {
-      try {
-        const ret = options.rmdirSync(p, options);
-        return ret;
-      } catch {
-      }
-    } while (Date.now() - startTime < 500);
-  } else {
-    const ret = options.rmdirSync(p, options);
-    return ret;
-  }
-}
-var rimraf_1 = rimraf$1;
-rimraf$1.sync = rimrafSync;
-const fs$9 = gracefulFs;
-const u$7 = universalify$1.fromCallback;
-const rimraf = rimraf_1;
-function remove$2(path2, callback) {
-  if (fs$9.rm) return fs$9.rm(path2, { recursive: true, force: true }, callback);
-  rimraf(path2, callback);
-}
-function removeSync$1(path2) {
-  if (fs$9.rmSync) return fs$9.rmSync(path2, { recursive: true, force: true });
-  rimraf.sync(path2);
-}
-var remove_1 = {
-  remove: u$7(remove$2),
-  removeSync: removeSync$1
-};
-const u$6 = universalify$1.fromPromise;
-const fs$8 = fs$i;
-const path$c = require$$1$4;
-const mkdir$3 = mkdirs$2;
-const remove$1 = remove_1;
-const emptyDir = u$6(async function emptyDir2(dir) {
-  let items;
-  try {
-    items = await fs$8.readdir(dir);
-  } catch {
-    return mkdir$3.mkdirs(dir);
-  }
-  return Promise.all(items.map((item) => remove$1.remove(path$c.join(dir, item))));
-});
-function emptyDirSync(dir) {
-  let items;
-  try {
-    items = fs$8.readdirSync(dir);
-  } catch {
-    return mkdir$3.mkdirsSync(dir);
-  }
-  items.forEach((item) => {
-    item = path$c.join(dir, item);
-    remove$1.removeSync(item);
-  });
-}
-var empty = {
-  emptyDirSync,
-  emptydirSync: emptyDirSync,
-  emptyDir,
-  emptydir: emptyDir
-};
-const u$5 = universalify$1.fromCallback;
-const path$b = require$$1$4;
-const fs$7 = gracefulFs;
-const mkdir$2 = mkdirs$2;
-function createFile$1(file2, callback) {
-  function makeFile() {
-    fs$7.writeFile(file2, "", (err) => {
-      if (err) return callback(err);
-      callback();
-    });
-  }
-  fs$7.stat(file2, (err, stats) => {
-    if (!err && stats.isFile()) return callback();
-    const dir = path$b.dirname(file2);
-    fs$7.stat(dir, (err2, stats2) => {
-      if (err2) {
-        if (err2.code === "ENOENT") {
-          return mkdir$2.mkdirs(dir, (err3) => {
-            if (err3) return callback(err3);
-            makeFile();
-          });
-        }
-        return callback(err2);
-      }
-      if (stats2.isDirectory()) makeFile();
-      else {
-        fs$7.readdir(dir, (err3) => {
-          if (err3) return callback(err3);
-        });
-      }
-    });
-  });
-}
-function createFileSync$1(file2) {
-  let stats;
-  try {
-    stats = fs$7.statSync(file2);
-  } catch {
-  }
-  if (stats && stats.isFile()) return;
-  const dir = path$b.dirname(file2);
-  try {
-    if (!fs$7.statSync(dir).isDirectory()) {
-      fs$7.readdirSync(dir);
-    }
-  } catch (err) {
-    if (err && err.code === "ENOENT") mkdir$2.mkdirsSync(dir);
-    else throw err;
-  }
-  fs$7.writeFileSync(file2, "");
-}
-var file = {
-  createFile: u$5(createFile$1),
-  createFileSync: createFileSync$1
-};
-const u$4 = universalify$1.fromCallback;
-const path$a = require$$1$4;
-const fs$6 = gracefulFs;
-const mkdir$1 = mkdirs$2;
-const pathExists$4 = pathExists_1.pathExists;
-const { areIdentical: areIdentical$1 } = stat$4;
-function createLink$1(srcpath, dstpath, callback) {
-  function makeLink(srcpath2, dstpath2) {
-    fs$6.link(srcpath2, dstpath2, (err) => {
-      if (err) return callback(err);
-      callback(null);
-    });
-  }
-  fs$6.lstat(dstpath, (_, dstStat) => {
-    fs$6.lstat(srcpath, (err, srcStat) => {
-      if (err) {
-        err.message = err.message.replace("lstat", "ensureLink");
-        return callback(err);
-      }
-      if (dstStat && areIdentical$1(srcStat, dstStat)) return callback(null);
-      const dir = path$a.dirname(dstpath);
-      pathExists$4(dir, (err2, dirExists) => {
-        if (err2) return callback(err2);
-        if (dirExists) return makeLink(srcpath, dstpath);
-        mkdir$1.mkdirs(dir, (err3) => {
-          if (err3) return callback(err3);
-          makeLink(srcpath, dstpath);
-        });
-      });
-    });
-  });
-}
-function createLinkSync$1(srcpath, dstpath) {
-  let dstStat;
-  try {
-    dstStat = fs$6.lstatSync(dstpath);
-  } catch {
-  }
-  try {
-    const srcStat = fs$6.lstatSync(srcpath);
-    if (dstStat && areIdentical$1(srcStat, dstStat)) return;
-  } catch (err) {
-    err.message = err.message.replace("lstat", "ensureLink");
-    throw err;
-  }
-  const dir = path$a.dirname(dstpath);
-  const dirExists = fs$6.existsSync(dir);
-  if (dirExists) return fs$6.linkSync(srcpath, dstpath);
-  mkdir$1.mkdirsSync(dir);
-  return fs$6.linkSync(srcpath, dstpath);
-}
-var link = {
-  createLink: u$4(createLink$1),
-  createLinkSync: createLinkSync$1
-};
-const path$9 = require$$1$4;
-const fs$5 = gracefulFs;
-const pathExists$3 = pathExists_1.pathExists;
-function symlinkPaths$1(srcpath, dstpath, callback) {
-  if (path$9.isAbsolute(srcpath)) {
-    return fs$5.lstat(srcpath, (err) => {
-      if (err) {
-        err.message = err.message.replace("lstat", "ensureSymlink");
-        return callback(err);
-      }
-      return callback(null, {
-        toCwd: srcpath,
-        toDst: srcpath
-      });
-    });
-  } else {
-    const dstdir = path$9.dirname(dstpath);
-    const relativeToDst = path$9.join(dstdir, srcpath);
-    return pathExists$3(relativeToDst, (err, exists) => {
-      if (err) return callback(err);
-      if (exists) {
-        return callback(null, {
-          toCwd: relativeToDst,
-          toDst: srcpath
-        });
-      } else {
-        return fs$5.lstat(srcpath, (err2) => {
-          if (err2) {
-            err2.message = err2.message.replace("lstat", "ensureSymlink");
-            return callback(err2);
-          }
-          return callback(null, {
-            toCwd: srcpath,
-            toDst: path$9.relative(dstdir, srcpath)
-          });
-        });
-      }
-    });
-  }
-}
-function symlinkPathsSync$1(srcpath, dstpath) {
-  let exists;
-  if (path$9.isAbsolute(srcpath)) {
-    exists = fs$5.existsSync(srcpath);
-    if (!exists) throw new Error("absolute srcpath does not exist");
-    return {
-      toCwd: srcpath,
-      toDst: srcpath
-    };
-  } else {
-    const dstdir = path$9.dirname(dstpath);
-    const relativeToDst = path$9.join(dstdir, srcpath);
-    exists = fs$5.existsSync(relativeToDst);
-    if (exists) {
-      return {
-        toCwd: relativeToDst,
-        toDst: srcpath
-      };
-    } else {
-      exists = fs$5.existsSync(srcpath);
-      if (!exists) throw new Error("relative srcpath does not exist");
-      return {
-        toCwd: srcpath,
-        toDst: path$9.relative(dstdir, srcpath)
-      };
-    }
-  }
-}
-var symlinkPaths_1 = {
-  symlinkPaths: symlinkPaths$1,
-  symlinkPathsSync: symlinkPathsSync$1
-};
-const fs$4 = gracefulFs;
-function symlinkType$1(srcpath, type2, callback) {
-  callback = typeof type2 === "function" ? type2 : callback;
-  type2 = typeof type2 === "function" ? false : type2;
-  if (type2) return callback(null, type2);
-  fs$4.lstat(srcpath, (err, stats) => {
-    if (err) return callback(null, "file");
-    type2 = stats && stats.isDirectory() ? "dir" : "file";
-    callback(null, type2);
-  });
-}
-function symlinkTypeSync$1(srcpath, type2) {
-  let stats;
-  if (type2) return type2;
-  try {
-    stats = fs$4.lstatSync(srcpath);
-  } catch {
-    return "file";
-  }
-  return stats && stats.isDirectory() ? "dir" : "file";
-}
-var symlinkType_1 = {
-  symlinkType: symlinkType$1,
-  symlinkTypeSync: symlinkTypeSync$1
-};
-const u$3 = universalify$1.fromCallback;
-const path$8 = require$$1$4;
-const fs$3 = fs$i;
-const _mkdirs = mkdirs$2;
-const mkdirs = _mkdirs.mkdirs;
-const mkdirsSync = _mkdirs.mkdirsSync;
-const _symlinkPaths = symlinkPaths_1;
-const symlinkPaths = _symlinkPaths.symlinkPaths;
-const symlinkPathsSync = _symlinkPaths.symlinkPathsSync;
-const _symlinkType = symlinkType_1;
-const symlinkType = _symlinkType.symlinkType;
-const symlinkTypeSync = _symlinkType.symlinkTypeSync;
-const pathExists$2 = pathExists_1.pathExists;
-const { areIdentical } = stat$4;
-function createSymlink$1(srcpath, dstpath, type2, callback) {
-  callback = typeof type2 === "function" ? type2 : callback;
-  type2 = typeof type2 === "function" ? false : type2;
-  fs$3.lstat(dstpath, (err, stats) => {
-    if (!err && stats.isSymbolicLink()) {
-      Promise.all([
-        fs$3.stat(srcpath),
-        fs$3.stat(dstpath)
-      ]).then(([srcStat, dstStat]) => {
-        if (areIdentical(srcStat, dstStat)) return callback(null);
-        _createSymlink(srcpath, dstpath, type2, callback);
-      });
-    } else _createSymlink(srcpath, dstpath, type2, callback);
-  });
-}
-function _createSymlink(srcpath, dstpath, type2, callback) {
-  symlinkPaths(srcpath, dstpath, (err, relative) => {
-    if (err) return callback(err);
-    srcpath = relative.toDst;
-    symlinkType(relative.toCwd, type2, (err2, type3) => {
-      if (err2) return callback(err2);
-      const dir = path$8.dirname(dstpath);
-      pathExists$2(dir, (err3, dirExists) => {
-        if (err3) return callback(err3);
-        if (dirExists) return fs$3.symlink(srcpath, dstpath, type3, callback);
-        mkdirs(dir, (err4) => {
-          if (err4) return callback(err4);
-          fs$3.symlink(srcpath, dstpath, type3, callback);
-        });
-      });
-    });
-  });
-}
-function createSymlinkSync$1(srcpath, dstpath, type2) {
-  let stats;
-  try {
-    stats = fs$3.lstatSync(dstpath);
-  } catch {
-  }
-  if (stats && stats.isSymbolicLink()) {
-    const srcStat = fs$3.statSync(srcpath);
-    const dstStat = fs$3.statSync(dstpath);
-    if (areIdentical(srcStat, dstStat)) return;
-  }
-  const relative = symlinkPathsSync(srcpath, dstpath);
-  srcpath = relative.toDst;
-  type2 = symlinkTypeSync(relative.toCwd, type2);
-  const dir = path$8.dirname(dstpath);
-  const exists = fs$3.existsSync(dir);
-  if (exists) return fs$3.symlinkSync(srcpath, dstpath, type2);
-  mkdirsSync(dir);
-  return fs$3.symlinkSync(srcpath, dstpath, type2);
-}
-var symlink = {
-  createSymlink: u$3(createSymlink$1),
-  createSymlinkSync: createSymlinkSync$1
-};
-const { createFile, createFileSync } = file;
-const { createLink, createLinkSync } = link;
-const { createSymlink, createSymlinkSync } = symlink;
-var ensure = {
-  // file
-  createFile,
-  createFileSync,
-  ensureFile: createFile,
-  ensureFileSync: createFileSync,
-  // link
-  createLink,
-  createLinkSync,
-  ensureLink: createLink,
-  ensureLinkSync: createLinkSync,
-  // symlink
-  createSymlink,
-  createSymlinkSync,
-  ensureSymlink: createSymlink,
-  ensureSymlinkSync: createSymlinkSync
-};
-function stringify$3(obj, { EOL = "\n", finalEOL = true, replacer = null, spaces } = {}) {
-  const EOF = finalEOL ? EOL : "";
-  const str2 = JSON.stringify(obj, replacer, spaces);
-  return str2.replace(/\n/g, EOL) + EOF;
-}
-function stripBom$1(content) {
-  if (Buffer.isBuffer(content)) content = content.toString("utf8");
-  return content.replace(/^\uFEFF/, "");
-}
-var utils = { stringify: stringify$3, stripBom: stripBom$1 };
-let _fs;
-try {
-  _fs = gracefulFs;
-} catch (_) {
-  _fs = require$$1$2;
-}
-const universalify = universalify$1;
-const { stringify: stringify$2, stripBom } = utils;
-async function _readFile(file2, options = {}) {
-  if (typeof options === "string") {
-    options = { encoding: options };
-  }
-  const fs2 = options.fs || _fs;
-  const shouldThrow = "throws" in options ? options.throws : true;
-  let data = await universalify.fromCallback(fs2.readFile)(file2, options);
-  data = stripBom(data);
-  let obj;
-  try {
-    obj = JSON.parse(data, options ? options.reviver : null);
-  } catch (err) {
-    if (shouldThrow) {
-      err.message = `${file2}: ${err.message}`;
-      throw err;
-    } else {
-      return null;
-    }
-  }
-  return obj;
-}
-const readFile = universalify.fromPromise(_readFile);
-function readFileSync(file2, options = {}) {
-  if (typeof options === "string") {
-    options = { encoding: options };
-  }
-  const fs2 = options.fs || _fs;
-  const shouldThrow = "throws" in options ? options.throws : true;
-  try {
-    let content = fs2.readFileSync(file2, options);
-    content = stripBom(content);
-    return JSON.parse(content, options.reviver);
-  } catch (err) {
-    if (shouldThrow) {
-      err.message = `${file2}: ${err.message}`;
-      throw err;
-    } else {
-      return null;
-    }
-  }
-}
-async function _writeFile(file2, obj, options = {}) {
-  const fs2 = options.fs || _fs;
-  const str2 = stringify$2(obj, options);
-  await universalify.fromCallback(fs2.writeFile)(file2, str2, options);
-}
-const writeFile = universalify.fromPromise(_writeFile);
-function writeFileSync(file2, obj, options = {}) {
-  const fs2 = options.fs || _fs;
-  const str2 = stringify$2(obj, options);
-  return fs2.writeFileSync(file2, str2, options);
-}
-const jsonfile$1 = {
-  readFile,
-  readFileSync,
-  writeFile,
-  writeFileSync
-};
-var jsonfile_1 = jsonfile$1;
-const jsonFile$1 = jsonfile_1;
-var jsonfile = {
-  // jsonfile exports
-  readJson: jsonFile$1.readFile,
-  readJsonSync: jsonFile$1.readFileSync,
-  writeJson: jsonFile$1.writeFile,
-  writeJsonSync: jsonFile$1.writeFileSync
-};
-const u$2 = universalify$1.fromCallback;
-const fs$2 = gracefulFs;
-const path$7 = require$$1$4;
-const mkdir = mkdirs$2;
-const pathExists$1 = pathExists_1.pathExists;
-function outputFile$1(file2, data, encoding, callback) {
-  if (typeof encoding === "function") {
-    callback = encoding;
-    encoding = "utf8";
-  }
-  const dir = path$7.dirname(file2);
-  pathExists$1(dir, (err, itDoes) => {
-    if (err) return callback(err);
-    if (itDoes) return fs$2.writeFile(file2, data, encoding, callback);
-    mkdir.mkdirs(dir, (err2) => {
-      if (err2) return callback(err2);
-      fs$2.writeFile(file2, data, encoding, callback);
-    });
-  });
-}
-function outputFileSync$1(file2, ...args) {
-  const dir = path$7.dirname(file2);
-  if (fs$2.existsSync(dir)) {
-    return fs$2.writeFileSync(file2, ...args);
-  }
-  mkdir.mkdirsSync(dir);
-  fs$2.writeFileSync(file2, ...args);
-}
-var outputFile_1 = {
-  outputFile: u$2(outputFile$1),
-  outputFileSync: outputFileSync$1
-};
-const { stringify: stringify$1 } = utils;
-const { outputFile } = outputFile_1;
-async function outputJson(file2, data, options = {}) {
-  const str2 = stringify$1(data, options);
-  await outputFile(file2, str2, options);
-}
-var outputJson_1 = outputJson;
-const { stringify } = utils;
-const { outputFileSync } = outputFile_1;
-function outputJsonSync(file2, data, options) {
-  const str2 = stringify(data, options);
-  outputFileSync(file2, str2, options);
-}
-var outputJsonSync_1 = outputJsonSync;
-const u$1 = universalify$1.fromPromise;
-const jsonFile = jsonfile;
-jsonFile.outputJson = u$1(outputJson_1);
-jsonFile.outputJsonSync = outputJsonSync_1;
-jsonFile.outputJSON = jsonFile.outputJson;
-jsonFile.outputJSONSync = jsonFile.outputJsonSync;
-jsonFile.writeJSON = jsonFile.writeJson;
-jsonFile.writeJSONSync = jsonFile.writeJsonSync;
-jsonFile.readJSON = jsonFile.readJson;
-jsonFile.readJSONSync = jsonFile.readJsonSync;
-var json$1 = jsonFile;
-const fs$1 = gracefulFs;
-const path$6 = require$$1$4;
-const copy = copy$1.copy;
-const remove = remove_1.remove;
-const mkdirp = mkdirs$2.mkdirp;
-const pathExists = pathExists_1.pathExists;
-const stat$1 = stat$4;
-function move$1(src2, dest, opts, cb) {
-  if (typeof opts === "function") {
-    cb = opts;
-    opts = {};
-  }
-  opts = opts || {};
-  const overwrite = opts.overwrite || opts.clobber || false;
-  stat$1.checkPaths(src2, dest, "move", opts, (err, stats) => {
-    if (err) return cb(err);
-    const { srcStat, isChangingCase = false } = stats;
-    stat$1.checkParentPaths(src2, srcStat, dest, "move", (err2) => {
-      if (err2) return cb(err2);
-      if (isParentRoot$1(dest)) return doRename$1(src2, dest, overwrite, isChangingCase, cb);
-      mkdirp(path$6.dirname(dest), (err3) => {
-        if (err3) return cb(err3);
-        return doRename$1(src2, dest, overwrite, isChangingCase, cb);
-      });
-    });
-  });
-}
-function isParentRoot$1(dest) {
-  const parent = path$6.dirname(dest);
-  const parsedPath = path$6.parse(parent);
-  return parsedPath.root === parent;
-}
-function doRename$1(src2, dest, overwrite, isChangingCase, cb) {
-  if (isChangingCase) return rename$1(src2, dest, overwrite, cb);
-  if (overwrite) {
-    return remove(dest, (err) => {
-      if (err) return cb(err);
-      return rename$1(src2, dest, overwrite, cb);
-    });
-  }
-  pathExists(dest, (err, destExists) => {
-    if (err) return cb(err);
-    if (destExists) return cb(new Error("dest already exists."));
-    return rename$1(src2, dest, overwrite, cb);
-  });
-}
-function rename$1(src2, dest, overwrite, cb) {
-  fs$1.rename(src2, dest, (err) => {
-    if (!err) return cb();
-    if (err.code !== "EXDEV") return cb(err);
-    return moveAcrossDevice$1(src2, dest, overwrite, cb);
-  });
-}
-function moveAcrossDevice$1(src2, dest, overwrite, cb) {
-  const opts = {
-    overwrite,
-    errorOnExist: true
-  };
-  copy(src2, dest, opts, (err) => {
-    if (err) return cb(err);
-    return remove(src2, cb);
-  });
-}
-var move_1 = move$1;
-const fs = gracefulFs;
-const path$5 = require$$1$4;
-const copySync = copy$1.copySync;
-const removeSync = remove_1.removeSync;
-const mkdirpSync = mkdirs$2.mkdirpSync;
-const stat = stat$4;
-function moveSync(src2, dest, opts) {
-  opts = opts || {};
-  const overwrite = opts.overwrite || opts.clobber || false;
-  const { srcStat, isChangingCase = false } = stat.checkPathsSync(src2, dest, "move", opts);
-  stat.checkParentPathsSync(src2, srcStat, dest, "move");
-  if (!isParentRoot(dest)) mkdirpSync(path$5.dirname(dest));
-  return doRename(src2, dest, overwrite, isChangingCase);
-}
-function isParentRoot(dest) {
-  const parent = path$5.dirname(dest);
-  const parsedPath = path$5.parse(parent);
-  return parsedPath.root === parent;
-}
-function doRename(src2, dest, overwrite, isChangingCase) {
-  if (isChangingCase) return rename(src2, dest, overwrite);
-  if (overwrite) {
-    removeSync(dest);
-    return rename(src2, dest, overwrite);
-  }
-  if (fs.existsSync(dest)) throw new Error("dest already exists.");
-  return rename(src2, dest, overwrite);
-}
-function rename(src2, dest, overwrite) {
-  try {
-    fs.renameSync(src2, dest);
-  } catch (err) {
-    if (err.code !== "EXDEV") throw err;
-    return moveAcrossDevice(src2, dest, overwrite);
-  }
-}
-function moveAcrossDevice(src2, dest, overwrite) {
-  const opts = {
-    overwrite,
-    errorOnExist: true
-  };
-  copySync(src2, dest, opts);
-  return removeSync(src2);
-}
-var moveSync_1 = moveSync;
-const u = universalify$1.fromCallback;
-var move = {
-  move: u(move_1),
-  moveSync: moveSync_1
-};
-var lib = {
-  // Export promiseified graceful-fs:
-  ...fs$i,
-  // Export extra methods:
-  ...copy$1,
-  ...empty,
-  ...ensure,
-  ...json$1,
-  ...mkdirs$2,
-  ...move,
-  ...outputFile_1,
-  ...pathExists_1,
-  ...remove_1
-};
-var BaseUpdater = {};
-var AppUpdater = {};
 var jsYaml = {};
 var loader$1 = {};
 var common$5 = {};
@@ -8248,6 +8248,7 @@ var debug_1 = debug$1;
   const re2 = exports.re = [];
   const safeRe = exports.safeRe = [];
   const src2 = exports.src = [];
+  const safeSrc = exports.safeSrc = [];
   const t2 = exports.t = {};
   let R = 0;
   const LETTERDASHNUMBER = "[a-zA-Z0-9-]";
@@ -8268,6 +8269,7 @@ var debug_1 = debug$1;
     debug2(name, index, value);
     t2[name] = index;
     src2[index] = value;
+    safeSrc[index] = safe;
     re2[index] = new RegExp(value, isGlobal ? "g" : void 0);
     safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
   };
@@ -8348,7 +8350,7 @@ var identifiers$1 = {
 };
 const debug = debug_1;
 const { MAX_LENGTH, MAX_SAFE_INTEGER } = constants$1;
-const { safeRe: re$1, t: t$1 } = reExports;
+const { safeRe: re$1, safeSrc: src, t: t$1 } = reExports;
 const parseOptions = parseOptions_1;
 const { compareIdentifiers } = identifiers$1;
 let SemVer$d = class SemVer {
@@ -8488,6 +8490,18 @@ let SemVer$d = class SemVer {
   // preminor will bump the version up to the next minor release, and immediately
   // down to pre-release. premajor and prepatch work the same way.
   inc(release, identifier, identifierBase) {
+    if (release.startsWith("pre")) {
+      if (!identifier && identifierBase === false) {
+        throw new Error("invalid increment argument: identifier is empty");
+      }
+      if (identifier) {
+        const r = new RegExp(`^${this.options.loose ? src[t$1.PRERELEASELOOSE] : src[t$1.PRERELEASE]}$`);
+        const match = `-${identifier}`.match(r);
+        if (!match || match[1] !== identifier) {
+          throw new Error(`invalid identifier: ${identifier}`);
+        }
+      }
+    }
     switch (release) {
       case "premajor":
         this.prerelease.length = 0;
@@ -8513,6 +8527,12 @@ let SemVer$d = class SemVer {
         }
         this.inc("pre", identifier, identifierBase);
         break;
+      case "release":
+        if (this.prerelease.length === 0) {
+          throw new Error(`version ${this.raw} is not a prerelease`);
+        }
+        this.prerelease.length = 0;
+        break;
       case "major":
         if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
           this.major++;
@@ -8536,9 +8556,6 @@ let SemVer$d = class SemVer {
         break;
       case "pre": {
         const base = Number(identifierBase) ? 1 : 0;
-        if (!identifier && identifierBase === false) {
-          throw new Error("invalid increment argument: identifier is empty");
-        }
         if (this.prerelease.length === 0) {
           this.prerelease = [base];
         } else {
@@ -8643,13 +8660,12 @@ const diff$1 = (version1, version2) => {
     if (!lowVersion.patch && !lowVersion.minor) {
       return "major";
     }
-    if (highVersion.patch) {
+    if (lowVersion.compareMain(highVersion) === 0) {
+      if (lowVersion.minor && !lowVersion.patch) {
+        return "minor";
+      }
       return "patch";
     }
-    if (highVersion.minor) {
-      return "minor";
-    }
-    return "major";
   }
   const prefix = highHasPre ? "pre" : "";
   if (v1.major !== v2.major) {
@@ -10453,11 +10469,11 @@ var lodash_isequalExports = lodash_isequal.exports;
 Object.defineProperty(DownloadedUpdateHelper$1, "__esModule", { value: true });
 DownloadedUpdateHelper$1.DownloadedUpdateHelper = void 0;
 DownloadedUpdateHelper$1.createTempUpdateFile = createTempUpdateFile;
-const crypto_1 = require$$0$2;
-const fs_1$2 = require$$1$2;
+const crypto_1$2 = require$$0$3;
+const fs_1$4 = require$$1;
 const isEqual = lodash_isequalExports;
-const fs_extra_1$2 = lib;
-const path$4 = require$$1$4;
+const fs_extra_1$6 = lib;
+const path$8 = require$$1$1;
 class DownloadedUpdateHelper {
   constructor(cacheDir) {
     this.cacheDir = cacheDir;
@@ -10477,11 +10493,11 @@ class DownloadedUpdateHelper {
     return this._packageFile;
   }
   get cacheDirForPendingUpdate() {
-    return path$4.join(this.cacheDir, "pending");
+    return path$8.join(this.cacheDir, "pending");
   }
   async validateDownloadedPath(updateFile, updateInfo, fileInfo, logger) {
     if (this.versionInfo != null && this.file === updateFile && this.fileInfo != null) {
-      if (isEqual(this.versionInfo, updateInfo) && isEqual(this.fileInfo.info, fileInfo.info) && await (0, fs_extra_1$2.pathExists)(updateFile)) {
+      if (isEqual(this.versionInfo, updateInfo) && isEqual(this.fileInfo.info, fileInfo.info) && await (0, fs_extra_1$6.pathExists)(updateFile)) {
         return updateFile;
       } else {
         return null;
@@ -10506,7 +10522,7 @@ class DownloadedUpdateHelper {
       isAdminRightsRequired: fileInfo.info.isAdminRightsRequired === true
     };
     if (isSaveCache) {
-      await (0, fs_extra_1$2.outputJson)(this.getUpdateInfoFile(), this._downloadedFileInfo);
+      await (0, fs_extra_1$6.outputJson)(this.getUpdateInfoFile(), this._downloadedFileInfo);
     }
   }
   async clear() {
@@ -10518,7 +10534,7 @@ class DownloadedUpdateHelper {
   }
   async cleanCacheDirForPendingUpdate() {
     try {
-      await (0, fs_extra_1$2.emptyDir)(this.cacheDirForPendingUpdate);
+      await (0, fs_extra_1$6.emptyDir)(this.cacheDirForPendingUpdate);
     } catch (_ignore) {
     }
   }
@@ -10529,13 +10545,13 @@ class DownloadedUpdateHelper {
    */
   async getValidCachedUpdateFile(fileInfo, logger) {
     const updateInfoFilePath = this.getUpdateInfoFile();
-    const doesUpdateInfoFileExist = await (0, fs_extra_1$2.pathExists)(updateInfoFilePath);
+    const doesUpdateInfoFileExist = await (0, fs_extra_1$6.pathExists)(updateInfoFilePath);
     if (!doesUpdateInfoFileExist) {
       return null;
     }
     let cachedInfo;
     try {
-      cachedInfo = await (0, fs_extra_1$2.readJson)(updateInfoFilePath);
+      cachedInfo = await (0, fs_extra_1$6.readJson)(updateInfoFilePath);
     } catch (error2) {
       let message = `No cached update info available`;
       if (error2.code !== "ENOENT") {
@@ -10556,8 +10572,8 @@ class DownloadedUpdateHelper {
       await this.cleanCacheDirForPendingUpdate();
       return null;
     }
-    const updateFile = path$4.join(this.cacheDirForPendingUpdate, cachedInfo.fileName);
-    if (!await (0, fs_extra_1$2.pathExists)(updateFile)) {
+    const updateFile = path$8.join(this.cacheDirForPendingUpdate, cachedInfo.fileName);
+    if (!await (0, fs_extra_1$6.pathExists)(updateFile)) {
       logger.info("Cached update file doesn't exist");
       return null;
     }
@@ -10571,15 +10587,15 @@ class DownloadedUpdateHelper {
     return updateFile;
   }
   getUpdateInfoFile() {
-    return path$4.join(this.cacheDirForPendingUpdate, "update-info.json");
+    return path$8.join(this.cacheDirForPendingUpdate, "update-info.json");
   }
 }
 DownloadedUpdateHelper$1.DownloadedUpdateHelper = DownloadedUpdateHelper;
 function hashFile(file2, algorithm = "sha512", encoding = "base64", options) {
   return new Promise((resolve, reject) => {
-    const hash = (0, crypto_1.createHash)(algorithm);
+    const hash = (0, crypto_1$2.createHash)(algorithm);
     hash.on("error", reject).setEncoding(encoding);
-    (0, fs_1$2.createReadStream)(file2, {
+    (0, fs_1$4.createReadStream)(file2, {
       ...options,
       highWaterMark: 1024 * 1024
       /* better to use more memory but hash faster */
@@ -10591,17 +10607,17 @@ function hashFile(file2, algorithm = "sha512", encoding = "base64", options) {
 }
 async function createTempUpdateFile(name, cacheDir, log) {
   let nameCounter = 0;
-  let result = path$4.join(cacheDir, name);
+  let result = path$8.join(cacheDir, name);
   for (let i = 0; i < 3; i++) {
     try {
-      await (0, fs_extra_1$2.unlink)(result);
+      await (0, fs_extra_1$6.unlink)(result);
       return result;
     } catch (e) {
       if (e.code === "ENOENT") {
         return result;
       }
       log.warn(`Error on remove temp update file: ${e}`);
-      result = path$4.join(cacheDir, `${nameCounter++}-${name}`);
+      result = path$8.join(cacheDir, `${nameCounter++}-${name}`);
     }
   }
   return result;
@@ -10610,26 +10626,26 @@ var ElectronAppAdapter$1 = {};
 var AppAdapter = {};
 Object.defineProperty(AppAdapter, "__esModule", { value: true });
 AppAdapter.getAppCacheDir = getAppCacheDir;
-const path$3 = require$$1$4;
-const os_1 = require$$2;
+const path$7 = require$$1$1;
+const os_1$1 = require$$2;
 function getAppCacheDir() {
-  const homedir = (0, os_1.homedir)();
+  const homedir = (0, os_1$1.homedir)();
   let result;
   if (process.platform === "win32") {
-    result = process.env["LOCALAPPDATA"] || path$3.join(homedir, "AppData", "Local");
+    result = process.env["LOCALAPPDATA"] || path$7.join(homedir, "AppData", "Local");
   } else if (process.platform === "darwin") {
-    result = path$3.join(homedir, "Library", "Caches");
+    result = path$7.join(homedir, "Library", "Caches");
   } else {
-    result = process.env["XDG_CACHE_HOME"] || path$3.join(homedir, ".cache");
+    result = process.env["XDG_CACHE_HOME"] || path$7.join(homedir, ".cache");
   }
   return result;
 }
 Object.defineProperty(ElectronAppAdapter$1, "__esModule", { value: true });
 ElectronAppAdapter$1.ElectronAppAdapter = void 0;
-const path$2 = require$$1$4;
+const path$6 = require$$1$1;
 const AppAdapter_1 = AppAdapter;
 class ElectronAppAdapter {
-  constructor(app2 = require$$1$5.app) {
+  constructor(app2 = require$$1$4.app) {
     this.app = app2;
   }
   whenReady() {
@@ -10645,7 +10661,7 @@ class ElectronAppAdapter {
     return this.app.isPackaged === true;
   }
   get appUpdateConfigPath() {
-    return this.isPackaged ? path$2.join(process.resourcesPath, "app-update.yml") : path$2.join(this.app.getAppPath(), "dev-app-update.yml");
+    return this.isPackaged ? path$6.join(process.resourcesPath, "app-update.yml") : path$6.join(this.app.getAppPath(), "dev-app-update.yml");
   }
   get userDataPath() {
     return this.app.getPath("userData");
@@ -10672,7 +10688,7 @@ var electronHttpExecutor = {};
   const builder_util_runtime_12 = out;
   exports.NET_SESSION_NAME = "electron-updater";
   function getNetSession() {
-    return require$$1$5.session.fromPartition(exports.NET_SESSION_NAME, {
+    return require$$1$4.session.fromPartition(exports.NET_SESSION_NAME, {
       cache: false
     });
   }
@@ -10713,7 +10729,7 @@ var electronHttpExecutor = {};
       if (this.cachedSession == null) {
         this.cachedSession = getNetSession();
       }
-      const request = require$$1$5.net.request({
+      const request = require$$1$4.net.request({
         ...options,
         session: this.cachedSession
       });
@@ -10738,7 +10754,6 @@ var electronHttpExecutor = {};
 })(electronHttpExecutor);
 var GenericProvider$1 = {};
 var util = {};
-var INFINITY = 1 / 0;
 var symbolTag = "[object Symbol]";
 var reRegExpChar = /[\\^$.*+?()[\]{}|]/g, reHasRegExpChar = RegExp(reRegExpChar.source);
 var freeGlobal = typeof commonjsGlobal == "object" && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
@@ -10756,7 +10771,7 @@ function baseToString(value) {
     return symbolToString ? symbolToString.call(value) : "";
   }
   var result = value + "";
-  return result == "0" && 1 / value == -INFINITY ? "-0" : result;
+  return result == "0" && 1 / value == -Infinity ? "-0" : result;
 }
 function isObjectLike(value) {
   return !!value && typeof value == "object";
@@ -10777,17 +10792,17 @@ util.newBaseUrl = newBaseUrl;
 util.newUrlFromBase = newUrlFromBase;
 util.getChannelFilename = getChannelFilename;
 util.blockmapFiles = blockmapFiles;
-const url_1$3 = require$$4;
+const url_1$4 = require$$4$1;
 const escapeRegExp = lodash_escaperegexp;
 function newBaseUrl(url) {
-  const result = new url_1$3.URL(url);
+  const result = new url_1$4.URL(url);
   if (!result.pathname.endsWith("/")) {
     result.pathname += "/";
   }
   return result;
 }
 function newUrlFromBase(pathname, baseUrl, addRandomQueryToAvoidCaching = false) {
-  const result = new url_1$3.URL(pathname, baseUrl);
+  const result = new url_1$4.URL(pathname, baseUrl);
   const search = baseUrl.search;
   if (search != null && search.length !== 0) {
     result.search = search;
@@ -10811,9 +10826,9 @@ Provider$1.findFile = findFile;
 Provider$1.parseUpdateInfo = parseUpdateInfo;
 Provider$1.getFileList = getFileList;
 Provider$1.resolveFiles = resolveFiles;
-const builder_util_runtime_1$a = out;
-const js_yaml_1$1 = jsYaml;
-const util_1$5 = util;
+const builder_util_runtime_1$e = out;
+const js_yaml_1$2 = jsYaml;
+const util_1$6 = util;
 class Provider {
   constructor(runtimeOptions) {
     this.runtimeOptions = runtimeOptions;
@@ -10860,14 +10875,14 @@ class Provider {
     } else {
       result.headers = headers == null ? this.requestHeaders : { ...this.requestHeaders, ...headers };
     }
-    (0, builder_util_runtime_1$a.configureRequestUrl)(url, result);
+    (0, builder_util_runtime_1$e.configureRequestUrl)(url, result);
     return result;
   }
 }
 Provider$1.Provider = Provider;
 function findFile(files, extension, not) {
   if (files.length === 0) {
-    throw (0, builder_util_runtime_1$a.newError)("No files provided", "ERR_UPDATER_NO_FILES_PROVIDED");
+    throw (0, builder_util_runtime_1$e.newError)("No files provided", "ERR_UPDATER_NO_FILES_PROVIDED");
   }
   const result = files.find((it) => it.url.pathname.toLowerCase().endsWith(`.${extension}`));
   if (result != null) {
@@ -10880,13 +10895,13 @@ function findFile(files, extension, not) {
 }
 function parseUpdateInfo(rawData, channelFile, channelFileUrl) {
   if (rawData == null) {
-    throw (0, builder_util_runtime_1$a.newError)(`Cannot parse update info from ${channelFile} in the latest release artifacts (${channelFileUrl}): rawData: null`, "ERR_UPDATER_INVALID_UPDATE_INFO");
+    throw (0, builder_util_runtime_1$e.newError)(`Cannot parse update info from ${channelFile} in the latest release artifacts (${channelFileUrl}): rawData: null`, "ERR_UPDATER_INVALID_UPDATE_INFO");
   }
   let result;
   try {
-    result = (0, js_yaml_1$1.load)(rawData);
+    result = (0, js_yaml_1$2.load)(rawData);
   } catch (e) {
-    throw (0, builder_util_runtime_1$a.newError)(`Cannot parse update info from ${channelFile} in the latest release artifacts (${channelFileUrl}): ${e.stack || e.message}, rawData: ${rawData}`, "ERR_UPDATER_INVALID_UPDATE_INFO");
+    throw (0, builder_util_runtime_1$e.newError)(`Cannot parse update info from ${channelFile} in the latest release artifacts (${channelFileUrl}): ${e.stack || e.message}, rawData: ${rawData}`, "ERR_UPDATER_INVALID_UPDATE_INFO");
   }
   return result;
 }
@@ -10904,17 +10919,17 @@ function getFileList(updateInfo) {
       }
     ];
   } else {
-    throw (0, builder_util_runtime_1$a.newError)(`No files provided: ${(0, builder_util_runtime_1$a.safeStringifyJson)(updateInfo)}`, "ERR_UPDATER_NO_FILES_PROVIDED");
+    throw (0, builder_util_runtime_1$e.newError)(`No files provided: ${(0, builder_util_runtime_1$e.safeStringifyJson)(updateInfo)}`, "ERR_UPDATER_NO_FILES_PROVIDED");
   }
 }
 function resolveFiles(updateInfo, baseUrl, pathTransformer = (p) => p) {
   const files = getFileList(updateInfo);
   const result = files.map((fileInfo) => {
     if (fileInfo.sha2 == null && fileInfo.sha512 == null) {
-      throw (0, builder_util_runtime_1$a.newError)(`Update info doesn't contain nor sha256 neither sha512 checksum: ${(0, builder_util_runtime_1$a.safeStringifyJson)(fileInfo)}`, "ERR_UPDATER_NO_CHECKSUM");
+      throw (0, builder_util_runtime_1$e.newError)(`Update info doesn't contain nor sha256 neither sha512 checksum: ${(0, builder_util_runtime_1$e.safeStringifyJson)(fileInfo)}`, "ERR_UPDATER_NO_CHECKSUM");
     }
     return {
-      url: (0, util_1$5.newUrlFromBase)(pathTransformer(fileInfo.url), baseUrl),
+      url: (0, util_1$6.newUrlFromBase)(pathTransformer(fileInfo.url), baseUrl),
       info: fileInfo
     };
   });
@@ -10923,36 +10938,36 @@ function resolveFiles(updateInfo, baseUrl, pathTransformer = (p) => p) {
   if (packageInfo != null) {
     result[0].packageInfo = {
       ...packageInfo,
-      path: (0, util_1$5.newUrlFromBase)(pathTransformer(packageInfo.path), baseUrl).href
+      path: (0, util_1$6.newUrlFromBase)(pathTransformer(packageInfo.path), baseUrl).href
     };
   }
   return result;
 }
 Object.defineProperty(GenericProvider$1, "__esModule", { value: true });
 GenericProvider$1.GenericProvider = void 0;
-const builder_util_runtime_1$9 = out;
-const util_1$4 = util;
-const Provider_1$4 = Provider$1;
-class GenericProvider extends Provider_1$4.Provider {
+const builder_util_runtime_1$d = out;
+const util_1$5 = util;
+const Provider_1$a = Provider$1;
+class GenericProvider extends Provider_1$a.Provider {
   constructor(configuration, updater, runtimeOptions) {
     super(runtimeOptions);
     this.configuration = configuration;
     this.updater = updater;
-    this.baseUrl = (0, util_1$4.newBaseUrl)(this.configuration.url);
+    this.baseUrl = (0, util_1$5.newBaseUrl)(this.configuration.url);
   }
   get channel() {
     const result = this.updater.channel || this.configuration.channel;
     return result == null ? this.getDefaultChannelName() : this.getCustomChannelName(result);
   }
   async getLatestVersion() {
-    const channelFile = (0, util_1$4.getChannelFilename)(this.channel);
-    const channelUrl = (0, util_1$4.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
+    const channelFile = (0, util_1$5.getChannelFilename)(this.channel);
+    const channelUrl = (0, util_1$5.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
     for (let attemptNumber = 0; ; attemptNumber++) {
       try {
-        return (0, Provider_1$4.parseUpdateInfo)(await this.httpRequest(channelUrl), channelFile, channelUrl);
+        return (0, Provider_1$a.parseUpdateInfo)(await this.httpRequest(channelUrl), channelFile, channelUrl);
       } catch (e) {
-        if (e instanceof builder_util_runtime_1$9.HttpError && e.statusCode === 404) {
-          throw (0, builder_util_runtime_1$9.newError)(`Cannot find channel "${channelFile}" update info: ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
+        if (e instanceof builder_util_runtime_1$d.HttpError && e.statusCode === 404) {
+          throw (0, builder_util_runtime_1$d.newError)(`Cannot find channel "${channelFile}" update info: ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
         } else if (e.code === "ECONNREFUSED") {
           if (attemptNumber < 3) {
             await new Promise((resolve, reject) => {
@@ -10970,7 +10985,7 @@ class GenericProvider extends Provider_1$4.Provider {
     }
   }
   resolveFiles(updateInfo) {
-    return (0, Provider_1$4.resolveFiles)(updateInfo, this.baseUrl);
+    return (0, Provider_1$a.resolveFiles)(updateInfo, this.baseUrl);
   }
 }
 GenericProvider$1.GenericProvider = GenericProvider;
@@ -10978,10 +10993,10 @@ var providerFactory = {};
 var BitbucketProvider$1 = {};
 Object.defineProperty(BitbucketProvider$1, "__esModule", { value: true });
 BitbucketProvider$1.BitbucketProvider = void 0;
-const builder_util_runtime_1$8 = out;
-const util_1$3 = util;
-const Provider_1$3 = Provider$1;
-class BitbucketProvider extends Provider_1$3.Provider {
+const builder_util_runtime_1$c = out;
+const util_1$4 = util;
+const Provider_1$9 = Provider$1;
+class BitbucketProvider extends Provider_1$9.Provider {
   constructor(configuration, updater, runtimeOptions) {
     super({
       ...runtimeOptions,
@@ -10990,24 +11005,24 @@ class BitbucketProvider extends Provider_1$3.Provider {
     this.configuration = configuration;
     this.updater = updater;
     const { owner, slug } = configuration;
-    this.baseUrl = (0, util_1$3.newBaseUrl)(`https://api.bitbucket.org/2.0/repositories/${owner}/${slug}/downloads`);
+    this.baseUrl = (0, util_1$4.newBaseUrl)(`https://api.bitbucket.org/2.0/repositories/${owner}/${slug}/downloads`);
   }
   get channel() {
     return this.updater.channel || this.configuration.channel || "latest";
   }
   async getLatestVersion() {
-    const cancellationToken = new builder_util_runtime_1$8.CancellationToken();
-    const channelFile = (0, util_1$3.getChannelFilename)(this.getCustomChannelName(this.channel));
-    const channelUrl = (0, util_1$3.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
+    const cancellationToken = new builder_util_runtime_1$c.CancellationToken();
+    const channelFile = (0, util_1$4.getChannelFilename)(this.getCustomChannelName(this.channel));
+    const channelUrl = (0, util_1$4.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
     try {
       const updateInfo = await this.httpRequest(channelUrl, void 0, cancellationToken);
-      return (0, Provider_1$3.parseUpdateInfo)(updateInfo, channelFile, channelUrl);
+      return (0, Provider_1$9.parseUpdateInfo)(updateInfo, channelFile, channelUrl);
     } catch (e) {
-      throw (0, builder_util_runtime_1$8.newError)(`Unable to find latest version on ${this.toString()}, please ensure release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
+      throw (0, builder_util_runtime_1$c.newError)(`Unable to find latest version on ${this.toString()}, please ensure release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
     }
   }
   resolveFiles(updateInfo) {
-    return (0, Provider_1$3.resolveFiles)(updateInfo, this.baseUrl);
+    return (0, Provider_1$9.resolveFiles)(updateInfo, this.baseUrl);
   }
   toString() {
     const { owner, slug } = this.configuration;
@@ -11019,13 +11034,13 @@ var GitHubProvider$1 = {};
 Object.defineProperty(GitHubProvider$1, "__esModule", { value: true });
 GitHubProvider$1.GitHubProvider = GitHubProvider$1.BaseGitHubProvider = void 0;
 GitHubProvider$1.computeReleaseNotes = computeReleaseNotes;
-const builder_util_runtime_1$7 = out;
+const builder_util_runtime_1$b = out;
 const semver = semver$1;
-const url_1$2 = require$$4;
-const util_1$2 = util;
-const Provider_1$2 = Provider$1;
+const url_1$3 = require$$4$1;
+const util_1$3 = util;
+const Provider_1$8 = Provider$1;
 const hrefRegExp = /\/tag\/([^/]+)$/;
-class BaseGitHubProvider extends Provider_1$2.Provider {
+class BaseGitHubProvider extends Provider_1$8.Provider {
   constructor(options, defaultHost, runtimeOptions) {
     super({
       ...runtimeOptions,
@@ -11033,9 +11048,9 @@ class BaseGitHubProvider extends Provider_1$2.Provider {
       isUseMultipleRangeRequest: false
     });
     this.options = options;
-    this.baseUrl = (0, util_1$2.newBaseUrl)((0, builder_util_runtime_1$7.githubUrl)(options, defaultHost));
+    this.baseUrl = (0, util_1$3.newBaseUrl)((0, builder_util_runtime_1$b.githubUrl)(options, defaultHost));
     const apiHost = defaultHost === "github.com" ? "api.github.com" : defaultHost;
-    this.baseApiUrl = (0, util_1$2.newBaseUrl)((0, builder_util_runtime_1$7.githubUrl)(options, apiHost));
+    this.baseApiUrl = (0, util_1$3.newBaseUrl)((0, builder_util_runtime_1$b.githubUrl)(options, apiHost));
   }
   computeGithubBasePath(result) {
     const host = this.options.host;
@@ -11055,11 +11070,11 @@ class GitHubProvider extends BaseGitHubProvider {
   }
   async getLatestVersion() {
     var _a, _b, _c, _d, _e;
-    const cancellationToken = new builder_util_runtime_1$7.CancellationToken();
-    const feedXml = await this.httpRequest((0, util_1$2.newUrlFromBase)(`${this.basePath}.atom`, this.baseUrl), {
+    const cancellationToken = new builder_util_runtime_1$b.CancellationToken();
+    const feedXml = await this.httpRequest((0, util_1$3.newUrlFromBase)(`${this.basePath}.atom`, this.baseUrl), {
       accept: "application/xml, application/atom+xml, text/xml, */*"
     }, cancellationToken);
-    const feed = (0, builder_util_runtime_1$7.parseXml)(feedXml);
+    const feed = (0, builder_util_runtime_1$b.parseXml)(feedXml);
     let latestRelease = feed.element("entry", false, `No published versions on GitHub`);
     let tag = null;
     try {
@@ -11098,25 +11113,25 @@ class GitHubProvider extends BaseGitHubProvider {
         }
       }
     } catch (e) {
-      throw (0, builder_util_runtime_1$7.newError)(`Cannot parse releases feed: ${e.stack || e.message},
+      throw (0, builder_util_runtime_1$b.newError)(`Cannot parse releases feed: ${e.stack || e.message},
 XML:
 ${feedXml}`, "ERR_UPDATER_INVALID_RELEASE_FEED");
     }
     if (tag == null) {
-      throw (0, builder_util_runtime_1$7.newError)(`No published versions on GitHub`, "ERR_UPDATER_NO_PUBLISHED_VERSIONS");
+      throw (0, builder_util_runtime_1$b.newError)(`No published versions on GitHub`, "ERR_UPDATER_NO_PUBLISHED_VERSIONS");
     }
     let rawData;
     let channelFile = "";
     let channelFileUrl = "";
     const fetchData = async (channelName) => {
-      channelFile = (0, util_1$2.getChannelFilename)(channelName);
-      channelFileUrl = (0, util_1$2.newUrlFromBase)(this.getBaseDownloadPath(String(tag), channelFile), this.baseUrl);
+      channelFile = (0, util_1$3.getChannelFilename)(channelName);
+      channelFileUrl = (0, util_1$3.newUrlFromBase)(this.getBaseDownloadPath(String(tag), channelFile), this.baseUrl);
       const requestOptions = this.createRequestOptions(channelFileUrl);
       try {
         return await this.executor.request(requestOptions, cancellationToken);
       } catch (e) {
-        if (e instanceof builder_util_runtime_1$7.HttpError && e.statusCode === 404) {
-          throw (0, builder_util_runtime_1$7.newError)(`Cannot find ${channelFile} in the latest release artifacts (${channelFileUrl}): ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
+        if (e instanceof builder_util_runtime_1$b.HttpError && e.statusCode === 404) {
+          throw (0, builder_util_runtime_1$b.newError)(`Cannot find ${channelFile} in the latest release artifacts (${channelFileUrl}): ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
         }
         throw e;
       }
@@ -11134,7 +11149,7 @@ ${feedXml}`, "ERR_UPDATER_INVALID_RELEASE_FEED");
         throw e;
       }
     }
-    const result = (0, Provider_1$2.parseUpdateInfo)(rawData, channelFile, channelFileUrl);
+    const result = (0, Provider_1$8.parseUpdateInfo)(rawData, channelFile, channelFileUrl);
     if (result.releaseName == null) {
       result.releaseName = latestRelease.elementValueOrEmpty("title");
     }
@@ -11148,7 +11163,7 @@ ${feedXml}`, "ERR_UPDATER_INVALID_RELEASE_FEED");
   }
   async getLatestTagName(cancellationToken) {
     const options = this.options;
-    const url = options.host == null || options.host === "github.com" ? (0, util_1$2.newUrlFromBase)(`${this.basePath}/latest`, this.baseUrl) : new url_1$2.URL(`${this.computeGithubBasePath(`/repos/${options.owner}/${options.repo}/releases`)}/latest`, this.baseApiUrl);
+    const url = options.host == null || options.host === "github.com" ? (0, util_1$3.newUrlFromBase)(`${this.basePath}/latest`, this.baseUrl) : new url_1$3.URL(`${this.computeGithubBasePath(`/repos/${options.owner}/${options.repo}/releases`)}/latest`, this.baseApiUrl);
     try {
       const rawData = await this.httpRequest(url, { Accept: "application/json" }, cancellationToken);
       if (rawData == null) {
@@ -11157,14 +11172,14 @@ ${feedXml}`, "ERR_UPDATER_INVALID_RELEASE_FEED");
       const releaseInfo = JSON.parse(rawData);
       return releaseInfo.tag_name;
     } catch (e) {
-      throw (0, builder_util_runtime_1$7.newError)(`Unable to find latest version on GitHub (${url}), please ensure a production release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
+      throw (0, builder_util_runtime_1$b.newError)(`Unable to find latest version on GitHub (${url}), please ensure a production release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
     }
   }
   get basePath() {
     return `/${this.options.owner}/${this.options.repo}/releases`;
   }
   resolveFiles(updateInfo) {
-    return (0, Provider_1$2.resolveFiles)(updateInfo, this.baseUrl, (p) => this.getBaseDownloadPath(updateInfo.tag, p.replace(/ /g, "-")));
+    return (0, Provider_1$8.resolveFiles)(updateInfo, this.baseUrl, (p) => this.getBaseDownloadPath(updateInfo.tag, p.replace(/ /g, "-")));
   }
   getBaseDownloadPath(tag, fileName) {
     return `${this.basePath}/download/${tag}/${fileName}`;
@@ -11194,10 +11209,10 @@ function computeReleaseNotes(currentVersion, isFullChangelog, feed, latestReleas
 var KeygenProvider$1 = {};
 Object.defineProperty(KeygenProvider$1, "__esModule", { value: true });
 KeygenProvider$1.KeygenProvider = void 0;
-const builder_util_runtime_1$6 = out;
-const util_1$1 = util;
-const Provider_1$1 = Provider$1;
-class KeygenProvider extends Provider_1$1.Provider {
+const builder_util_runtime_1$a = out;
+const util_1$2 = util;
+const Provider_1$7 = Provider$1;
+class KeygenProvider extends Provider_1$7.Provider {
   constructor(configuration, updater, runtimeOptions) {
     super({
       ...runtimeOptions,
@@ -11205,27 +11220,29 @@ class KeygenProvider extends Provider_1$1.Provider {
     });
     this.configuration = configuration;
     this.updater = updater;
-    this.baseUrl = (0, util_1$1.newBaseUrl)(`https://api.keygen.sh/v1/accounts/${this.configuration.account}/artifacts?product=${this.configuration.product}`);
+    this.defaultHostname = "api.keygen.sh";
+    const host = this.configuration.host || this.defaultHostname;
+    this.baseUrl = (0, util_1$2.newBaseUrl)(`https://${host}/v1/accounts/${this.configuration.account}/artifacts?product=${this.configuration.product}`);
   }
   get channel() {
     return this.updater.channel || this.configuration.channel || "stable";
   }
   async getLatestVersion() {
-    const cancellationToken = new builder_util_runtime_1$6.CancellationToken();
-    const channelFile = (0, util_1$1.getChannelFilename)(this.getCustomChannelName(this.channel));
-    const channelUrl = (0, util_1$1.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
+    const cancellationToken = new builder_util_runtime_1$a.CancellationToken();
+    const channelFile = (0, util_1$2.getChannelFilename)(this.getCustomChannelName(this.channel));
+    const channelUrl = (0, util_1$2.newUrlFromBase)(channelFile, this.baseUrl, this.updater.isAddNoCacheQuery);
     try {
       const updateInfo = await this.httpRequest(channelUrl, {
         Accept: "application/vnd.api+json",
         "Keygen-Version": "1.1"
       }, cancellationToken);
-      return (0, Provider_1$1.parseUpdateInfo)(updateInfo, channelFile, channelUrl);
+      return (0, Provider_1$7.parseUpdateInfo)(updateInfo, channelFile, channelUrl);
     } catch (e) {
-      throw (0, builder_util_runtime_1$6.newError)(`Unable to find latest version on ${this.toString()}, please ensure release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
+      throw (0, builder_util_runtime_1$a.newError)(`Unable to find latest version on ${this.toString()}, please ensure release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
     }
   }
   resolveFiles(updateInfo) {
-    return (0, Provider_1$1.resolveFiles)(updateInfo, this.baseUrl);
+    return (0, Provider_1$7.resolveFiles)(updateInfo, this.baseUrl);
   }
   toString() {
     const { account, product, platform: platform2 } = this.configuration;
@@ -11236,13 +11253,13 @@ KeygenProvider$1.KeygenProvider = KeygenProvider;
 var PrivateGitHubProvider$1 = {};
 Object.defineProperty(PrivateGitHubProvider$1, "__esModule", { value: true });
 PrivateGitHubProvider$1.PrivateGitHubProvider = void 0;
-const builder_util_runtime_1$5 = out;
-const js_yaml_1 = jsYaml;
-const path$1 = require$$1$4;
-const url_1$1 = require$$4;
-const util_1 = util;
+const builder_util_runtime_1$9 = out;
+const js_yaml_1$1 = jsYaml;
+const path$5 = require$$1$1;
+const url_1$2 = require$$4$1;
+const util_1$1 = util;
 const GitHubProvider_1$1 = GitHubProvider$1;
-const Provider_1 = Provider$1;
+const Provider_1$6 = Provider$1;
 class PrivateGitHubProvider extends GitHubProvider_1$1.BaseGitHubProvider {
   constructor(options, updater, token, runtimeOptions) {
     super(options, "api.github.com", runtimeOptions);
@@ -11255,20 +11272,20 @@ class PrivateGitHubProvider extends GitHubProvider_1$1.BaseGitHubProvider {
     return result;
   }
   async getLatestVersion() {
-    const cancellationToken = new builder_util_runtime_1$5.CancellationToken();
-    const channelFile = (0, util_1.getChannelFilename)(this.getDefaultChannelName());
+    const cancellationToken = new builder_util_runtime_1$9.CancellationToken();
+    const channelFile = (0, util_1$1.getChannelFilename)(this.getDefaultChannelName());
     const releaseInfo = await this.getLatestVersionInfo(cancellationToken);
     const asset = releaseInfo.assets.find((it) => it.name === channelFile);
     if (asset == null) {
-      throw (0, builder_util_runtime_1$5.newError)(`Cannot find ${channelFile} in the release ${releaseInfo.html_url || releaseInfo.name}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
+      throw (0, builder_util_runtime_1$9.newError)(`Cannot find ${channelFile} in the release ${releaseInfo.html_url || releaseInfo.name}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
     }
-    const url = new url_1$1.URL(asset.url);
+    const url = new url_1$2.URL(asset.url);
     let result;
     try {
-      result = (0, js_yaml_1.load)(await this.httpRequest(url, this.configureHeaders("application/octet-stream"), cancellationToken));
+      result = (0, js_yaml_1$1.load)(await this.httpRequest(url, this.configureHeaders("application/octet-stream"), cancellationToken));
     } catch (e) {
-      if (e instanceof builder_util_runtime_1$5.HttpError && e.statusCode === 404) {
-        throw (0, builder_util_runtime_1$5.newError)(`Cannot find ${channelFile} in the latest release artifacts (${url}): ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
+      if (e instanceof builder_util_runtime_1$9.HttpError && e.statusCode === 404) {
+        throw (0, builder_util_runtime_1$9.newError)(`Cannot find ${channelFile} in the latest release artifacts (${url}): ${e.stack || e.message}`, "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND");
       }
       throw e;
     }
@@ -11290,7 +11307,7 @@ class PrivateGitHubProvider extends GitHubProvider_1$1.BaseGitHubProvider {
     if (!allowPrerelease) {
       basePath = `${basePath}/latest`;
     }
-    const url = (0, util_1.newUrlFromBase)(basePath, this.baseUrl);
+    const url = (0, util_1$1.newUrlFromBase)(basePath, this.baseUrl);
     try {
       const version = JSON.parse(await this.httpRequest(url, this.configureHeaders("application/vnd.github.v3+json"), cancellationToken));
       if (allowPrerelease) {
@@ -11299,21 +11316,21 @@ class PrivateGitHubProvider extends GitHubProvider_1$1.BaseGitHubProvider {
         return version;
       }
     } catch (e) {
-      throw (0, builder_util_runtime_1$5.newError)(`Unable to find latest version on GitHub (${url}), please ensure a production release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
+      throw (0, builder_util_runtime_1$9.newError)(`Unable to find latest version on GitHub (${url}), please ensure a production release exists: ${e.stack || e.message}`, "ERR_UPDATER_LATEST_VERSION_NOT_FOUND");
     }
   }
   get basePath() {
     return this.computeGithubBasePath(`/repos/${this.options.owner}/${this.options.repo}/releases`);
   }
   resolveFiles(updateInfo) {
-    return (0, Provider_1.getFileList)(updateInfo).map((it) => {
-      const name = path$1.posix.basename(it.url).replace(/ /g, "-");
+    return (0, Provider_1$6.getFileList)(updateInfo).map((it) => {
+      const name = path$5.posix.basename(it.url).replace(/ /g, "-");
       const asset = updateInfo.assets.find((it2) => it2 != null && it2.name === name);
       if (asset == null) {
-        throw (0, builder_util_runtime_1$5.newError)(`Cannot find asset "${name}" in: ${JSON.stringify(updateInfo.assets, null, 2)}`, "ERR_UPDATER_ASSET_NOT_FOUND");
+        throw (0, builder_util_runtime_1$9.newError)(`Cannot find asset "${name}" in: ${JSON.stringify(updateInfo.assets, null, 2)}`, "ERR_UPDATER_ASSET_NOT_FOUND");
       }
       return {
-        url: new url_1$1.URL(asset.url),
+        url: new url_1$2.URL(asset.url),
         info: it
       };
     });
@@ -11323,9 +11340,9 @@ PrivateGitHubProvider$1.PrivateGitHubProvider = PrivateGitHubProvider;
 Object.defineProperty(providerFactory, "__esModule", { value: true });
 providerFactory.isUrlProbablySupportMultiRangeRequests = isUrlProbablySupportMultiRangeRequests;
 providerFactory.createClient = createClient;
-const builder_util_runtime_1$4 = out;
+const builder_util_runtime_1$8 = out;
 const BitbucketProvider_1 = BitbucketProvider$1;
-const GenericProvider_1 = GenericProvider$1;
+const GenericProvider_1$1 = GenericProvider$1;
 const GitHubProvider_1 = GitHubProvider$1;
 const KeygenProvider_1 = KeygenProvider$1;
 const PrivateGitHubProvider_1 = PrivateGitHubProvider$1;
@@ -11334,7 +11351,7 @@ function isUrlProbablySupportMultiRangeRequests(url) {
 }
 function createClient(data, updater, runtimeOptions) {
   if (typeof data === "string") {
-    throw (0, builder_util_runtime_1$4.newError)("Please pass PublishConfiguration object", "ERR_UPDATER_INVALID_PROVIDER_CONFIGURATION");
+    throw (0, builder_util_runtime_1$8.newError)("Please pass PublishConfiguration object", "ERR_UPDATER_INVALID_PROVIDER_CONFIGURATION");
   }
   const provider = data.provider;
   switch (provider) {
@@ -11353,9 +11370,9 @@ function createClient(data, updater, runtimeOptions) {
       return new KeygenProvider_1.KeygenProvider(data, updater, runtimeOptions);
     case "s3":
     case "spaces":
-      return new GenericProvider_1.GenericProvider({
+      return new GenericProvider_1$1.GenericProvider({
         provider: "generic",
-        url: (0, builder_util_runtime_1$4.getS3LikeProviderBaseUrl)(data),
+        url: (0, builder_util_runtime_1$8.getS3LikeProviderBaseUrl)(data),
         channel: data.channel || null
       }, updater, {
         ...runtimeOptions,
@@ -11364,7 +11381,7 @@ function createClient(data, updater, runtimeOptions) {
       });
     case "generic": {
       const options = data;
-      return new GenericProvider_1.GenericProvider(options, updater, {
+      return new GenericProvider_1$1.GenericProvider(options, updater, {
         ...runtimeOptions,
         isUseMultipleRangeRequest: options.useMultipleRangeRequest !== false && isUrlProbablySupportMultiRangeRequests(options.url)
       });
@@ -11373,12 +11390,12 @@ function createClient(data, updater, runtimeOptions) {
       const options = data;
       const constructor = options.updateProvider;
       if (!constructor) {
-        throw (0, builder_util_runtime_1$4.newError)("Custom provider not specified", "ERR_UPDATER_INVALID_PROVIDER_CONFIGURATION");
+        throw (0, builder_util_runtime_1$8.newError)("Custom provider not specified", "ERR_UPDATER_INVALID_PROVIDER_CONFIGURATION");
       }
       return new constructor(options, updater, runtimeOptions);
     }
     default:
-      throw (0, builder_util_runtime_1$4.newError)(`Unsupported provider: ${provider}`, "ERR_UPDATER_UNSUPPORTED_PROVIDER");
+      throw (0, builder_util_runtime_1$8.newError)(`Unsupported provider: ${provider}`, "ERR_UPDATER_UNSUPPORTED_PROVIDER");
   }
 }
 var GenericDifferentialDownloader$1 = {};
@@ -11490,8 +11507,8 @@ function buildBlockFileMap(list) {
 Object.defineProperty(DataSplitter$1, "__esModule", { value: true });
 DataSplitter$1.DataSplitter = void 0;
 DataSplitter$1.copyData = copyData;
-const builder_util_runtime_1$3 = out;
-const fs_1$1 = require$$1$2;
+const builder_util_runtime_1$7 = out;
+const fs_1$3 = require$$1;
 const stream_1$1 = require$$0$1;
 const downloadPlanBuilder_1$2 = downloadPlanBuilder;
 const DOUBLE_CRLF = Buffer.from("\r\n\r\n");
@@ -11502,7 +11519,7 @@ var ReadState;
   ReadState2[ReadState2["BODY"] = 2] = "BODY";
 })(ReadState || (ReadState = {}));
 function copyData(task, out2, oldFileFd, reject, resolve) {
-  const readStream = (0, fs_1$1.createReadStream)("", {
+  const readStream = (0, fs_1$3.createReadStream)("", {
     fd: oldFileFd,
     autoClose: false,
     start: task.start,
@@ -11546,7 +11563,7 @@ class DataSplitter extends stream_1$1.Writable {
   async handleData(chunk) {
     let start = 0;
     if (this.ignoreByteCount !== 0 && this.remainingPartDataCount !== 0) {
-      throw (0, builder_util_runtime_1$3.newError)("Internal error", "ERR_DATA_SPLITTER_BYTE_COUNT_MISMATCH");
+      throw (0, builder_util_runtime_1$7.newError)("Internal error", "ERR_DATA_SPLITTER_BYTE_COUNT_MISMATCH");
     }
     if (this.ignoreByteCount > 0) {
       const toIgnore = Math.min(this.ignoreByteCount, chunk.length);
@@ -11580,14 +11597,14 @@ class DataSplitter extends stream_1$1.Writable {
           if (this.isFinished) {
             taskIndex = this.options.end;
           } else {
-            throw (0, builder_util_runtime_1$3.newError)("taskIndex is null", "ERR_DATA_SPLITTER_TASK_INDEX_IS_NULL");
+            throw (0, builder_util_runtime_1$7.newError)("taskIndex is null", "ERR_DATA_SPLITTER_TASK_INDEX_IS_NULL");
           }
         }
         const prevTaskIndex = this.partIndex === 0 ? this.options.start : this.partIndexToTaskIndex.get(this.partIndex - 1) + 1;
         if (prevTaskIndex < taskIndex) {
           await this.copyExistingData(prevTaskIndex, taskIndex);
         } else if (prevTaskIndex > taskIndex) {
-          throw (0, builder_util_runtime_1$3.newError)("prevTaskIndex must be < taskIndex", "ERR_DATA_SPLITTER_TASK_INDEX_ASSERT_FAILED");
+          throw (0, builder_util_runtime_1$7.newError)("prevTaskIndex must be < taskIndex", "ERR_DATA_SPLITTER_TASK_INDEX_ASSERT_FAILED");
         }
         if (this.isFinished) {
           this.onPartEnd();
@@ -11651,7 +11668,7 @@ class DataSplitter extends stream_1$1.Writable {
   onPartEnd() {
     const expectedLength = this.partIndexToLength[this.partIndex - 1];
     if (this.actualPartLength !== expectedLength) {
-      throw (0, builder_util_runtime_1$3.newError)(`Expected length: ${expectedLength} differs from actual: ${this.actualPartLength}`, "ERR_DATA_SPLITTER_LENGTH_MISMATCH");
+      throw (0, builder_util_runtime_1$7.newError)(`Expected length: ${expectedLength} differs from actual: ${this.actualPartLength}`, "ERR_DATA_SPLITTER_LENGTH_MISMATCH");
     }
     this.actualPartLength = 0;
   }
@@ -11682,7 +11699,7 @@ var multipleRangeDownloader = {};
 Object.defineProperty(multipleRangeDownloader, "__esModule", { value: true });
 multipleRangeDownloader.executeTasksUsingMultipleRangeRequests = executeTasksUsingMultipleRangeRequests;
 multipleRangeDownloader.checkIsRangesSupported = checkIsRangesSupported;
-const builder_util_runtime_1$2 = out;
+const builder_util_runtime_1$6 = out;
 const DataSplitter_1$1 = DataSplitter$1;
 const downloadPlanBuilder_1$1 = downloadPlanBuilder;
 function executeTasksUsingMultipleRangeRequests(differentialDownloader, tasks, out2, oldFileFd, reject) {
@@ -11752,7 +11769,7 @@ function doExecuteTasks(differentialDownloader, options, out2, resolve, reject) 
     if (!checkIsRangesSupported(response, reject)) {
       return;
     }
-    const contentType = (0, builder_util_runtime_1$2.safeGetHeader)(response, "content-type");
+    const contentType = (0, builder_util_runtime_1$6.safeGetHeader)(response, "content-type");
     const m = /^multipart\/.+?(?:; boundary=(?:(?:"(.+)")|(?:([^\s]+))))$/i.exec(contentType);
     if (m == null) {
       reject(new Error(`Content-Type "multipart/byteranges" is expected, but got "${contentType}"`));
@@ -11773,11 +11790,11 @@ function doExecuteTasks(differentialDownloader, options, out2, resolve, reject) 
 }
 function checkIsRangesSupported(response, reject) {
   if (response.statusCode >= 400) {
-    reject((0, builder_util_runtime_1$2.createHttpError)(response));
+    reject((0, builder_util_runtime_1$6.createHttpError)(response));
     return false;
   }
   if (response.statusCode !== 206) {
-    const acceptRanges = (0, builder_util_runtime_1$2.safeGetHeader)(response, "accept-ranges");
+    const acceptRanges = (0, builder_util_runtime_1$6.safeGetHeader)(response, "accept-ranges");
     if (acceptRanges == null || acceptRanges === "none") {
       reject(new Error(`Server doesn't support Accept-Ranges (response code ${response.statusCode})`));
       return false;
@@ -11872,11 +11889,11 @@ class ProgressDifferentialDownloadCallbackTransform extends stream_1.Transform {
 ProgressDifferentialDownloadCallbackTransform$1.ProgressDifferentialDownloadCallbackTransform = ProgressDifferentialDownloadCallbackTransform;
 Object.defineProperty(DifferentialDownloader$1, "__esModule", { value: true });
 DifferentialDownloader$1.DifferentialDownloader = void 0;
-const builder_util_runtime_1$1 = out;
-const fs_extra_1$1 = lib;
-const fs_1 = require$$1$2;
+const builder_util_runtime_1$5 = out;
+const fs_extra_1$5 = lib;
+const fs_1$2 = require$$1;
 const DataSplitter_1 = DataSplitter$1;
-const url_1 = require$$4;
+const url_1$1 = require$$4$1;
 const downloadPlanBuilder_1 = downloadPlanBuilder;
 const multipleRangeDownloader_1 = multipleRangeDownloader;
 const ProgressDifferentialDownloadCallbackTransform_1 = ProgressDifferentialDownloadCallbackTransform$1;
@@ -11896,8 +11913,8 @@ class DifferentialDownloader {
         accept: "*/*"
       }
     };
-    (0, builder_util_runtime_1$1.configureRequestUrl)(this.options.newUrl, result);
-    (0, builder_util_runtime_1$1.configureRequestOptions)(result);
+    (0, builder_util_runtime_1$5.configureRequestUrl)(this.options.newUrl, result);
+    (0, builder_util_runtime_1$5.configureRequestOptions)(result);
     return result;
   }
   doDownload(oldBlockMap, newBlockMap) {
@@ -11930,7 +11947,7 @@ class DifferentialDownloader {
     const fdList = [];
     const closeFiles = () => {
       return Promise.all(fdList.map((openedFile) => {
-        return (0, fs_extra_1$1.close)(openedFile.descriptor).catch((e) => {
+        return (0, fs_extra_1$5.close)(openedFile.descriptor).catch((e) => {
           this.logger.error(`cannot close file "${openedFile.path}": ${e}`);
         });
       }));
@@ -11952,11 +11969,11 @@ class DifferentialDownloader {
     });
   }
   async doDownloadFile(tasks, fdList) {
-    const oldFileFd = await (0, fs_extra_1$1.open)(this.options.oldFile, "r");
+    const oldFileFd = await (0, fs_extra_1$5.open)(this.options.oldFile, "r");
     fdList.push({ descriptor: oldFileFd, path: this.options.oldFile });
-    const newFileFd = await (0, fs_extra_1$1.open)(this.options.newFile, "w");
+    const newFileFd = await (0, fs_extra_1$5.open)(this.options.newFile, "w");
     fdList.push({ descriptor: newFileFd, path: this.options.newFile });
-    const fileOut = (0, fs_1.createWriteStream)(this.options.newFile, { fd: newFileFd });
+    const fileOut = (0, fs_1$2.createWriteStream)(this.options.newFile, { fd: newFileFd });
     await new Promise((resolve, reject) => {
       const streams = [];
       let downloadInfoTransform = void 0;
@@ -11976,7 +11993,7 @@ class DifferentialDownloader {
         downloadInfoTransform = new ProgressDifferentialDownloadCallbackTransform_1.ProgressDifferentialDownloadCallbackTransform(progressDifferentialDownloadInfo, this.options.cancellationToken, this.options.onProgress);
         streams.push(downloadInfoTransform);
       }
-      const digestTransform = new builder_util_runtime_1$1.DigestTransform(this.blockAwareFileInfo.sha512);
+      const digestTransform = new builder_util_runtime_1$5.DigestTransform(this.blockAwareFileInfo.sha512);
       digestTransform.isValidateOnEnd = false;
       streams.push(digestTransform);
       fileOut.on("finish", () => {
@@ -12042,7 +12059,7 @@ class DifferentialDownloader {
             reject(new Error("response has been aborted by the server"));
           });
           if (response.statusCode >= 400) {
-            reject((0, builder_util_runtime_1$1.createHttpError)(response));
+            reject((0, builder_util_runtime_1$5.createHttpError)(response));
           }
           response.pipe(firstStream, {
             end: false
@@ -12062,7 +12079,7 @@ class DifferentialDownloader {
         request.on("redirect", (statusCode, method, redirectUrl) => {
           this.logger.info(`Redirect to ${removeQuery(redirectUrl)}`);
           actualUrl = redirectUrl;
-          (0, builder_util_runtime_1$1.configureRequestUrl)(new url_1.URL(actualUrl), requestOptions);
+          (0, builder_util_runtime_1$5.configureRequestUrl)(new url_1$1.URL(actualUrl), requestOptions);
           request.followRedirect();
         });
         this.httpExecutor.addErrorAndTimeoutHandlers(request, reject);
@@ -12120,706 +12137,764 @@ class GenericDifferentialDownloader extends DifferentialDownloader_1$1.Different
   }
 }
 GenericDifferentialDownloader$1.GenericDifferentialDownloader = GenericDifferentialDownloader;
-var hasRequiredAppUpdater;
-function requireAppUpdater() {
-  if (hasRequiredAppUpdater) return AppUpdater;
-  hasRequiredAppUpdater = 1;
-  Object.defineProperty(AppUpdater, "__esModule", { value: true });
-  AppUpdater.NoOpLogger = AppUpdater.AppUpdater = void 0;
+var types = {};
+(function(exports) {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.UpdaterSignal = exports.UPDATE_DOWNLOADED = exports.DOWNLOAD_PROGRESS = exports.CancellationToken = void 0;
+  exports.addHandler = addHandler;
   const builder_util_runtime_12 = out;
-  const crypto_12 = require$$0$2;
-  const os_12 = require$$2;
-  const events_12 = require$$0;
-  const fs_extra_12 = lib;
-  const js_yaml_12 = jsYaml;
-  const lazy_val_1 = main;
-  const path2 = require$$1$4;
-  const semver_1 = semver$1;
-  const DownloadedUpdateHelper_1 = DownloadedUpdateHelper$1;
-  const ElectronAppAdapter_1 = ElectronAppAdapter$1;
-  const electronHttpExecutor_1 = electronHttpExecutor;
-  const GenericProvider_12 = GenericProvider$1;
-  const main_1 = requireMain();
-  const providerFactory_1 = providerFactory;
-  const zlib_12 = require$$15;
-  const util_12 = util;
-  const GenericDifferentialDownloader_1 = GenericDifferentialDownloader$1;
-  let AppUpdater$1 = class AppUpdater2 extends events_12.EventEmitter {
-    /**
-     * Get the update channel. Doesn't return `channel` from the update configuration, only if was previously set.
-     */
-    get channel() {
-      return this._channel;
+  Object.defineProperty(exports, "CancellationToken", { enumerable: true, get: function() {
+    return builder_util_runtime_12.CancellationToken;
+  } });
+  exports.DOWNLOAD_PROGRESS = "download-progress";
+  exports.UPDATE_DOWNLOADED = "update-downloaded";
+  class UpdaterSignal {
+    constructor(emitter) {
+      this.emitter = emitter;
     }
     /**
-     * Set the update channel. Overrides `channel` in the update configuration.
-     *
-     * `allowDowngrade` will be automatically set to `true`. If this behavior is not suitable for you, simple set `allowDowngrade` explicitly after.
+     * Emitted when an authenticating proxy is [asking for user credentials](https://github.com/electron/electron/blob/master/docs/api/client-request.md#event-login).
      */
-    set channel(value) {
-      if (this._channel != null) {
-        if (typeof value !== "string") {
-          throw (0, builder_util_runtime_12.newError)(`Channel must be a string, but got: ${value}`, "ERR_UPDATER_INVALID_CHANNEL");
-        } else if (value.length === 0) {
-          throw (0, builder_util_runtime_12.newError)(`Channel must be not an empty string`, "ERR_UPDATER_INVALID_CHANNEL");
-        }
+    login(handler) {
+      addHandler(this.emitter, "login", handler);
+    }
+    progress(handler) {
+      addHandler(this.emitter, exports.DOWNLOAD_PROGRESS, handler);
+    }
+    updateDownloaded(handler) {
+      addHandler(this.emitter, exports.UPDATE_DOWNLOADED, handler);
+    }
+    updateCancelled(handler) {
+      addHandler(this.emitter, "update-cancelled", handler);
+    }
+  }
+  exports.UpdaterSignal = UpdaterSignal;
+  function addHandler(emitter, event, handler) {
+    {
+      emitter.on(event, handler);
+    }
+  }
+})(types);
+Object.defineProperty(AppUpdater$1, "__esModule", { value: true });
+AppUpdater$1.NoOpLogger = AppUpdater$1.AppUpdater = void 0;
+const builder_util_runtime_1$4 = out;
+const crypto_1$1 = require$$0$3;
+const os_1 = require$$2;
+const events_1 = require$$0$2;
+const fs_extra_1$4 = lib;
+const js_yaml_1 = jsYaml;
+const lazy_val_1 = main;
+const path$4 = require$$1$1;
+const semver_1 = semver$1;
+const DownloadedUpdateHelper_1 = DownloadedUpdateHelper$1;
+const ElectronAppAdapter_1 = ElectronAppAdapter$1;
+const electronHttpExecutor_1 = electronHttpExecutor;
+const GenericProvider_1 = GenericProvider$1;
+const providerFactory_1 = providerFactory;
+const zlib_1$1 = require$$14;
+const util_1 = util;
+const GenericDifferentialDownloader_1 = GenericDifferentialDownloader$1;
+const types_1$5 = types;
+class AppUpdater extends events_1.EventEmitter {
+  /**
+   * Get the update channel. Doesn't return `channel` from the update configuration, only if was previously set.
+   */
+  get channel() {
+    return this._channel;
+  }
+  /**
+   * Set the update channel. Overrides `channel` in the update configuration.
+   *
+   * `allowDowngrade` will be automatically set to `true`. If this behavior is not suitable for you, simple set `allowDowngrade` explicitly after.
+   */
+  set channel(value) {
+    if (this._channel != null) {
+      if (typeof value !== "string") {
+        throw (0, builder_util_runtime_1$4.newError)(`Channel must be a string, but got: ${value}`, "ERR_UPDATER_INVALID_CHANNEL");
+      } else if (value.length === 0) {
+        throw (0, builder_util_runtime_1$4.newError)(`Channel must be not an empty string`, "ERR_UPDATER_INVALID_CHANNEL");
       }
-      this._channel = value;
-      this.allowDowngrade = true;
     }
-    /**
-     *  Shortcut for explicitly adding auth tokens to request headers
-     */
-    addAuthHeader(token) {
-      this.requestHeaders = Object.assign({}, this.requestHeaders, {
-        authorization: token
+    this._channel = value;
+    this.allowDowngrade = true;
+  }
+  /**
+   *  Shortcut for explicitly adding auth tokens to request headers
+   */
+  addAuthHeader(token) {
+    this.requestHeaders = Object.assign({}, this.requestHeaders, {
+      authorization: token
+    });
+  }
+  // noinspection JSMethodCanBeStatic,JSUnusedGlobalSymbols
+  get netSession() {
+    return (0, electronHttpExecutor_1.getNetSession)();
+  }
+  /**
+   * The logger. You can pass [electron-log](https://github.com/megahertz/electron-log), [winston](https://github.com/winstonjs/winston) or another logger with the following interface: `{ info(), warn(), error() }`.
+   * Set it to `null` if you would like to disable a logging feature.
+   */
+  get logger() {
+    return this._logger;
+  }
+  set logger(value) {
+    this._logger = value == null ? new NoOpLogger() : value;
+  }
+  // noinspection JSUnusedGlobalSymbols
+  /**
+   * test only
+   * @private
+   */
+  set updateConfigPath(value) {
+    this.clientPromise = null;
+    this._appUpdateConfigPath = value;
+    this.configOnDisk = new lazy_val_1.Lazy(() => this.loadUpdateConfig());
+  }
+  /**
+   * Allows developer to override default logic for determining if an update is supported.
+   * The default logic compares the `UpdateInfo` minimum system version against the `os.release()` with `semver` package
+   */
+  get isUpdateSupported() {
+    return this._isUpdateSupported;
+  }
+  set isUpdateSupported(value) {
+    if (value) {
+      this._isUpdateSupported = value;
+    }
+  }
+  constructor(options, app2) {
+    super();
+    this.autoDownload = true;
+    this.autoInstallOnAppQuit = true;
+    this.autoRunAppAfterInstall = true;
+    this.allowPrerelease = false;
+    this.fullChangelog = false;
+    this.allowDowngrade = false;
+    this.disableWebInstaller = false;
+    this.disableDifferentialDownload = false;
+    this.forceDevUpdateConfig = false;
+    this._channel = null;
+    this.downloadedUpdateHelper = null;
+    this.requestHeaders = null;
+    this._logger = console;
+    this.signals = new types_1$5.UpdaterSignal(this);
+    this._appUpdateConfigPath = null;
+    this._isUpdateSupported = (updateInfo) => this.checkIfUpdateSupported(updateInfo);
+    this.clientPromise = null;
+    this.stagingUserIdPromise = new lazy_val_1.Lazy(() => this.getOrCreateStagingUserId());
+    this.configOnDisk = new lazy_val_1.Lazy(() => this.loadUpdateConfig());
+    this.checkForUpdatesPromise = null;
+    this.downloadPromise = null;
+    this.updateInfoAndProvider = null;
+    this._testOnlyOptions = null;
+    this.on("error", (error2) => {
+      this._logger.error(`Error: ${error2.stack || error2.message}`);
+    });
+    if (app2 == null) {
+      this.app = new ElectronAppAdapter_1.ElectronAppAdapter();
+      this.httpExecutor = new electronHttpExecutor_1.ElectronHttpExecutor((authInfo, callback) => this.emit("login", authInfo, callback));
+    } else {
+      this.app = app2;
+      this.httpExecutor = null;
+    }
+    const currentVersionString = this.app.version;
+    const currentVersion = (0, semver_1.parse)(currentVersionString);
+    if (currentVersion == null) {
+      throw (0, builder_util_runtime_1$4.newError)(`App version is not a valid semver version: "${currentVersionString}"`, "ERR_UPDATER_INVALID_VERSION");
+    }
+    this.currentVersion = currentVersion;
+    this.allowPrerelease = hasPrereleaseComponents(currentVersion);
+    if (options != null) {
+      this.setFeedURL(options);
+      if (typeof options !== "string" && options.requestHeaders) {
+        this.requestHeaders = options.requestHeaders;
+      }
+    }
+  }
+  //noinspection JSMethodCanBeStatic,JSUnusedGlobalSymbols
+  getFeedURL() {
+    return "Deprecated. Do not use it.";
+  }
+  /**
+   * Configure update provider. If value is `string`, [GenericServerOptions](./publish.md#genericserveroptions) will be set with value as `url`.
+   * @param options If you want to override configuration in the `app-update.yml`.
+   */
+  setFeedURL(options) {
+    const runtimeOptions = this.createProviderRuntimeOptions();
+    let provider;
+    if (typeof options === "string") {
+      provider = new GenericProvider_1.GenericProvider({ provider: "generic", url: options }, this, {
+        ...runtimeOptions,
+        isUseMultipleRangeRequest: (0, providerFactory_1.isUrlProbablySupportMultiRangeRequests)(options)
       });
+    } else {
+      provider = (0, providerFactory_1.createClient)(options, this, runtimeOptions);
     }
-    // noinspection JSMethodCanBeStatic,JSUnusedGlobalSymbols
-    get netSession() {
-      return (0, electronHttpExecutor_1.getNetSession)();
+    this.clientPromise = Promise.resolve(provider);
+  }
+  /**
+   * Asks the server whether there is an update.
+   * @returns null if the updater is disabled, otherwise info about the latest version
+   */
+  checkForUpdates() {
+    if (!this.isUpdaterActive()) {
+      return Promise.resolve(null);
     }
-    /**
-     * The logger. You can pass [electron-log](https://github.com/megahertz/electron-log), [winston](https://github.com/winstonjs/winston) or another logger with the following interface: `{ info(), warn(), error() }`.
-     * Set it to `null` if you would like to disable a logging feature.
-     */
-    get logger() {
-      return this._logger;
-    }
-    set logger(value) {
-      this._logger = value == null ? new NoOpLogger() : value;
-    }
-    // noinspection JSUnusedGlobalSymbols
-    /**
-     * test only
-     * @private
-     */
-    set updateConfigPath(value) {
-      this.clientPromise = null;
-      this._appUpdateConfigPath = value;
-      this.configOnDisk = new lazy_val_1.Lazy(() => this.loadUpdateConfig());
-    }
-    constructor(options, app2) {
-      super();
-      this.autoDownload = true;
-      this.autoInstallOnAppQuit = true;
-      this.autoRunAppAfterInstall = true;
-      this.allowPrerelease = false;
-      this.fullChangelog = false;
-      this.allowDowngrade = false;
-      this.disableWebInstaller = false;
-      this.disableDifferentialDownload = false;
-      this.forceDevUpdateConfig = false;
-      this._channel = null;
-      this.downloadedUpdateHelper = null;
-      this.requestHeaders = null;
-      this._logger = console;
-      this.signals = new main_1.UpdaterSignal(this);
-      this._appUpdateConfigPath = null;
-      this.clientPromise = null;
-      this.stagingUserIdPromise = new lazy_val_1.Lazy(() => this.getOrCreateStagingUserId());
-      this.configOnDisk = new lazy_val_1.Lazy(() => this.loadUpdateConfig());
-      this.checkForUpdatesPromise = null;
-      this.downloadPromise = null;
-      this.updateInfoAndProvider = null;
-      this._testOnlyOptions = null;
-      this.on("error", (error2) => {
-        this._logger.error(`Error: ${error2.stack || error2.message}`);
-      });
-      if (app2 == null) {
-        this.app = new ElectronAppAdapter_1.ElectronAppAdapter();
-        this.httpExecutor = new electronHttpExecutor_1.ElectronHttpExecutor((authInfo, callback) => this.emit("login", authInfo, callback));
-      } else {
-        this.app = app2;
-        this.httpExecutor = null;
-      }
-      const currentVersionString = this.app.version;
-      const currentVersion = (0, semver_1.parse)(currentVersionString);
-      if (currentVersion == null) {
-        throw (0, builder_util_runtime_12.newError)(`App version is not a valid semver version: "${currentVersionString}"`, "ERR_UPDATER_INVALID_VERSION");
-      }
-      this.currentVersion = currentVersion;
-      this.allowPrerelease = hasPrereleaseComponents(currentVersion);
-      if (options != null) {
-        this.setFeedURL(options);
-        if (typeof options !== "string" && options.requestHeaders) {
-          this.requestHeaders = options.requestHeaders;
-        }
-      }
-    }
-    //noinspection JSMethodCanBeStatic,JSUnusedGlobalSymbols
-    getFeedURL() {
-      return "Deprecated. Do not use it.";
-    }
-    /**
-     * Configure update provider. If value is `string`, [GenericServerOptions](./publish.md#genericserveroptions) will be set with value as `url`.
-     * @param options If you want to override configuration in the `app-update.yml`.
-     */
-    setFeedURL(options) {
-      const runtimeOptions = this.createProviderRuntimeOptions();
-      let provider;
-      if (typeof options === "string") {
-        provider = new GenericProvider_12.GenericProvider({ provider: "generic", url: options }, this, {
-          ...runtimeOptions,
-          isUseMultipleRangeRequest: (0, providerFactory_1.isUrlProbablySupportMultiRangeRequests)(options)
-        });
-      } else {
-        provider = (0, providerFactory_1.createClient)(options, this, runtimeOptions);
-      }
-      this.clientPromise = Promise.resolve(provider);
-    }
-    /**
-     * Asks the server whether there is an update.
-     */
-    checkForUpdates() {
-      if (!this.isUpdaterActive()) {
-        return Promise.resolve(null);
-      }
-      let checkForUpdatesPromise = this.checkForUpdatesPromise;
-      if (checkForUpdatesPromise != null) {
-        this._logger.info("Checking for update (already in progress)");
-        return checkForUpdatesPromise;
-      }
-      const nullizePromise = () => this.checkForUpdatesPromise = null;
-      this._logger.info("Checking for update");
-      checkForUpdatesPromise = this.doCheckForUpdates().then((it) => {
-        nullizePromise();
-        return it;
-      }).catch((e) => {
-        nullizePromise();
-        this.emit("error", e, `Cannot check for updates: ${(e.stack || e).toString()}`);
-        throw e;
-      });
-      this.checkForUpdatesPromise = checkForUpdatesPromise;
+    let checkForUpdatesPromise = this.checkForUpdatesPromise;
+    if (checkForUpdatesPromise != null) {
+      this._logger.info("Checking for update (already in progress)");
       return checkForUpdatesPromise;
     }
-    isUpdaterActive() {
-      const isEnabled = this.app.isPackaged || this.forceDevUpdateConfig;
-      if (!isEnabled) {
-        this._logger.info("Skip checkForUpdates because application is not packed and dev update config is not forced");
-        return false;
+    const nullizePromise = () => this.checkForUpdatesPromise = null;
+    this._logger.info("Checking for update");
+    checkForUpdatesPromise = this.doCheckForUpdates().then((it) => {
+      nullizePromise();
+      return it;
+    }).catch((e) => {
+      nullizePromise();
+      this.emit("error", e, `Cannot check for updates: ${(e.stack || e).toString()}`);
+      throw e;
+    });
+    this.checkForUpdatesPromise = checkForUpdatesPromise;
+    return checkForUpdatesPromise;
+  }
+  isUpdaterActive() {
+    const isEnabled = this.app.isPackaged || this.forceDevUpdateConfig;
+    if (!isEnabled) {
+      this._logger.info("Skip checkForUpdates because application is not packed and dev update config is not forced");
+      return false;
+    }
+    return true;
+  }
+  // noinspection JSUnusedGlobalSymbols
+  checkForUpdatesAndNotify(downloadNotification) {
+    return this.checkForUpdates().then((it) => {
+      if (!(it === null || it === void 0 ? void 0 : it.downloadPromise)) {
+        if (this._logger.debug != null) {
+          this._logger.debug("checkForUpdatesAndNotify called, downloadPromise is null");
+        }
+        return it;
       }
+      void it.downloadPromise.then(() => {
+        const notificationContent = AppUpdater.formatDownloadNotification(it.updateInfo.version, this.app.name, downloadNotification);
+        new require$$1$4.Notification(notificationContent).show();
+      });
+      return it;
+    });
+  }
+  static formatDownloadNotification(version, appName, downloadNotification) {
+    if (downloadNotification == null) {
+      downloadNotification = {
+        title: "A new update is ready to install",
+        body: `{appName} version {version} has been downloaded and will be automatically installed on exit`
+      };
+    }
+    downloadNotification = {
+      title: downloadNotification.title.replace("{appName}", appName).replace("{version}", version),
+      body: downloadNotification.body.replace("{appName}", appName).replace("{version}", version)
+    };
+    return downloadNotification;
+  }
+  async isStagingMatch(updateInfo) {
+    const rawStagingPercentage = updateInfo.stagingPercentage;
+    let stagingPercentage = rawStagingPercentage;
+    if (stagingPercentage == null) {
       return true;
     }
-    // noinspection JSUnusedGlobalSymbols
-    checkForUpdatesAndNotify(downloadNotification) {
-      return this.checkForUpdates().then((it) => {
-        if (!(it === null || it === void 0 ? void 0 : it.downloadPromise)) {
-          if (this._logger.debug != null) {
-            this._logger.debug("checkForUpdatesAndNotify called, downloadPromise is null");
-          }
-          return it;
-        }
-        void it.downloadPromise.then(() => {
-          const notificationContent = AppUpdater2.formatDownloadNotification(it.updateInfo.version, this.app.name, downloadNotification);
-          new require$$1$5.Notification(notificationContent).show();
-        });
-        return it;
-      });
+    stagingPercentage = parseInt(stagingPercentage, 10);
+    if (isNaN(stagingPercentage)) {
+      this._logger.warn(`Staging percentage is NaN: ${rawStagingPercentage}`);
+      return true;
     }
-    static formatDownloadNotification(version, appName, downloadNotification) {
-      if (downloadNotification == null) {
-        downloadNotification = {
-          title: "A new update is ready to install",
-          body: `{appName} version {version} has been downloaded and will be automatically installed on exit`
-        };
-      }
-      downloadNotification = {
-        title: downloadNotification.title.replace("{appName}", appName).replace("{version}", version),
-        body: downloadNotification.body.replace("{appName}", appName).replace("{version}", version)
-      };
-      return downloadNotification;
+    stagingPercentage = stagingPercentage / 100;
+    const stagingUserId = await this.stagingUserIdPromise.value;
+    const val = builder_util_runtime_1$4.UUID.parse(stagingUserId).readUInt32BE(12);
+    const percentage = val / 4294967295;
+    this._logger.info(`Staging percentage: ${stagingPercentage}, percentage: ${percentage}, user id: ${stagingUserId}`);
+    return percentage < stagingPercentage;
+  }
+  computeFinalHeaders(headers) {
+    if (this.requestHeaders != null) {
+      Object.assign(headers, this.requestHeaders);
     }
-    async isStagingMatch(updateInfo) {
-      const rawStagingPercentage = updateInfo.stagingPercentage;
-      let stagingPercentage = rawStagingPercentage;
-      if (stagingPercentage == null) {
-        return true;
-      }
-      stagingPercentage = parseInt(stagingPercentage, 10);
-      if (isNaN(stagingPercentage)) {
-        this._logger.warn(`Staging percentage is NaN: ${rawStagingPercentage}`);
-        return true;
-      }
-      stagingPercentage = stagingPercentage / 100;
-      const stagingUserId = await this.stagingUserIdPromise.value;
-      const val = builder_util_runtime_12.UUID.parse(stagingUserId).readUInt32BE(12);
-      const percentage = val / 4294967295;
-      this._logger.info(`Staging percentage: ${stagingPercentage}, percentage: ${percentage}, user id: ${stagingUserId}`);
-      return percentage < stagingPercentage;
+    return headers;
+  }
+  async isUpdateAvailable(updateInfo) {
+    const latestVersion = (0, semver_1.parse)(updateInfo.version);
+    if (latestVersion == null) {
+      throw (0, builder_util_runtime_1$4.newError)(`This file could not be downloaded, or the latest version (from update server) does not have a valid semver version: "${updateInfo.version}"`, "ERR_UPDATER_INVALID_VERSION");
     }
-    computeFinalHeaders(headers) {
-      if (this.requestHeaders != null) {
-        Object.assign(headers, this.requestHeaders);
-      }
-      return headers;
+    const currentVersion = this.currentVersion;
+    if ((0, semver_1.eq)(latestVersion, currentVersion)) {
+      return false;
     }
-    async isUpdateAvailable(updateInfo) {
-      const latestVersion = (0, semver_1.parse)(updateInfo.version);
-      if (latestVersion == null) {
-        throw (0, builder_util_runtime_12.newError)(`This file could not be downloaded, or the latest version (from update server) does not have a valid semver version: "${updateInfo.version}"`, "ERR_UPDATER_INVALID_VERSION");
-      }
-      const currentVersion = this.currentVersion;
-      if ((0, semver_1.eq)(latestVersion, currentVersion)) {
-        return false;
-      }
-      const minimumSystemVersion = updateInfo === null || updateInfo === void 0 ? void 0 : updateInfo.minimumSystemVersion;
-      const currentOSVersion = (0, os_12.release)();
-      if (minimumSystemVersion) {
-        try {
-          if ((0, semver_1.lt)(currentOSVersion, minimumSystemVersion)) {
-            this._logger.info(`Current OS version ${currentOSVersion} is less than the minimum OS version required ${minimumSystemVersion} for version ${currentOSVersion}`);
-            return false;
-          }
-        } catch (e) {
-          this._logger.warn(`Failed to compare current OS version(${currentOSVersion}) with minimum OS version(${minimumSystemVersion}): ${(e.message || e).toString()}`);
-        }
-      }
-      const isStagingMatch = await this.isStagingMatch(updateInfo);
-      if (!isStagingMatch) {
-        return false;
-      }
-      const isLatestVersionNewer = (0, semver_1.gt)(latestVersion, currentVersion);
-      const isLatestVersionOlder = (0, semver_1.lt)(latestVersion, currentVersion);
-      if (isLatestVersionNewer) {
-        return true;
-      }
-      return this.allowDowngrade && isLatestVersionOlder;
+    if (!await Promise.resolve(this.isUpdateSupported(updateInfo))) {
+      return false;
     }
-    async getUpdateInfoAndProvider() {
-      await this.app.whenReady();
-      if (this.clientPromise == null) {
-        this.clientPromise = this.configOnDisk.value.then((it) => (0, providerFactory_1.createClient)(it, this, this.createProviderRuntimeOptions()));
-      }
-      const client = await this.clientPromise;
-      const stagingUserId = await this.stagingUserIdPromise.value;
-      client.setRequestHeaders(this.computeFinalHeaders({ "x-user-staging-id": stagingUserId }));
-      return {
-        info: await client.getLatestVersion(),
-        provider: client
-      };
+    const isStagingMatch = await this.isStagingMatch(updateInfo);
+    if (!isStagingMatch) {
+      return false;
     }
-    createProviderRuntimeOptions() {
-      return {
-        isUseMultipleRangeRequest: true,
-        platform: this._testOnlyOptions == null ? process.platform : this._testOnlyOptions.platform,
-        executor: this.httpExecutor
-      };
+    const isLatestVersionNewer = (0, semver_1.gt)(latestVersion, currentVersion);
+    const isLatestVersionOlder = (0, semver_1.lt)(latestVersion, currentVersion);
+    if (isLatestVersionNewer) {
+      return true;
     }
-    async doCheckForUpdates() {
-      this.emit("checking-for-update");
-      const result = await this.getUpdateInfoAndProvider();
-      const updateInfo = result.info;
-      if (!await this.isUpdateAvailable(updateInfo)) {
-        this._logger.info(`Update for version ${this.currentVersion.format()} is not available (latest version: ${updateInfo.version}, downgrade is ${this.allowDowngrade ? "allowed" : "disallowed"}).`);
-        this.emit("update-not-available", updateInfo);
-        return {
-          versionInfo: updateInfo,
-          updateInfo
-        };
-      }
-      this.updateInfoAndProvider = result;
-      this.onUpdateAvailable(updateInfo);
-      const cancellationToken = new builder_util_runtime_12.CancellationToken();
-      return {
-        versionInfo: updateInfo,
-        updateInfo,
-        cancellationToken,
-        downloadPromise: this.autoDownload ? this.downloadUpdate(cancellationToken) : null
-      };
-    }
-    onUpdateAvailable(updateInfo) {
-      this._logger.info(`Found version ${updateInfo.version} (url: ${(0, builder_util_runtime_12.asArray)(updateInfo.files).map((it) => it.url).join(", ")})`);
-      this.emit("update-available", updateInfo);
-    }
-    /**
-     * Start downloading update manually. You can use this method if `autoDownload` option is set to `false`.
-     * @returns {Promise<Array<string>>} Paths to downloaded files.
-     */
-    downloadUpdate(cancellationToken = new builder_util_runtime_12.CancellationToken()) {
-      const updateInfoAndProvider = this.updateInfoAndProvider;
-      if (updateInfoAndProvider == null) {
-        const error2 = new Error("Please check update first");
-        this.dispatchError(error2);
-        return Promise.reject(error2);
-      }
-      if (this.downloadPromise != null) {
-        this._logger.info("Downloading update (already in progress)");
-        return this.downloadPromise;
-      }
-      this._logger.info(`Downloading update from ${(0, builder_util_runtime_12.asArray)(updateInfoAndProvider.info.files).map((it) => it.url).join(", ")}`);
-      const errorHandler = (e) => {
-        if (!(e instanceof builder_util_runtime_12.CancellationError)) {
-          try {
-            this.dispatchError(e);
-          } catch (nestedError) {
-            this._logger.warn(`Cannot dispatch error event: ${nestedError.stack || nestedError}`);
-          }
-        }
-        return e;
-      };
-      this.downloadPromise = this.doDownloadUpdate({
-        updateInfoAndProvider,
-        requestHeaders: this.computeRequestHeaders(updateInfoAndProvider.provider),
-        cancellationToken,
-        disableWebInstaller: this.disableWebInstaller,
-        disableDifferentialDownload: this.disableDifferentialDownload
-      }).catch((e) => {
-        throw errorHandler(e);
-      }).finally(() => {
-        this.downloadPromise = null;
-      });
-      return this.downloadPromise;
-    }
-    dispatchError(e) {
-      this.emit("error", e, (e.stack || e).toString());
-    }
-    dispatchUpdateDownloaded(event) {
-      this.emit(main_1.UPDATE_DOWNLOADED, event);
-    }
-    async loadUpdateConfig() {
-      if (this._appUpdateConfigPath == null) {
-        this._appUpdateConfigPath = this.app.appUpdateConfigPath;
-      }
-      return (0, js_yaml_12.load)(await (0, fs_extra_12.readFile)(this._appUpdateConfigPath, "utf-8"));
-    }
-    computeRequestHeaders(provider) {
-      const fileExtraDownloadHeaders = provider.fileExtraDownloadHeaders;
-      if (fileExtraDownloadHeaders != null) {
-        const requestHeaders = this.requestHeaders;
-        return requestHeaders == null ? fileExtraDownloadHeaders : {
-          ...fileExtraDownloadHeaders,
-          ...requestHeaders
-        };
-      }
-      return this.computeFinalHeaders({ accept: "*/*" });
-    }
-    async getOrCreateStagingUserId() {
-      const file2 = path2.join(this.app.userDataPath, ".updaterId");
+    return this.allowDowngrade && isLatestVersionOlder;
+  }
+  checkIfUpdateSupported(updateInfo) {
+    const minimumSystemVersion = updateInfo === null || updateInfo === void 0 ? void 0 : updateInfo.minimumSystemVersion;
+    const currentOSVersion = (0, os_1.release)();
+    if (minimumSystemVersion) {
       try {
-        const id2 = await (0, fs_extra_12.readFile)(file2, "utf-8");
-        if (builder_util_runtime_12.UUID.check(id2)) {
-          return id2;
-        } else {
-          this._logger.warn(`Staging user id file exists, but content was invalid: ${id2}`);
-        }
-      } catch (e) {
-        if (e.code !== "ENOENT") {
-          this._logger.warn(`Couldn't read staging user ID, creating a blank one: ${e}`);
-        }
-      }
-      const id = builder_util_runtime_12.UUID.v5((0, crypto_12.randomBytes)(4096), builder_util_runtime_12.UUID.OID);
-      this._logger.info(`Generated new staging user ID: ${id}`);
-      try {
-        await (0, fs_extra_12.outputFile)(file2, id);
-      } catch (e) {
-        this._logger.warn(`Couldn't write out staging user ID: ${e}`);
-      }
-      return id;
-    }
-    /** @internal */
-    get isAddNoCacheQuery() {
-      const headers = this.requestHeaders;
-      if (headers == null) {
-        return true;
-      }
-      for (const headerName of Object.keys(headers)) {
-        const s = headerName.toLowerCase();
-        if (s === "authorization" || s === "private-token") {
+        if ((0, semver_1.lt)(currentOSVersion, minimumSystemVersion)) {
+          this._logger.info(`Current OS version ${currentOSVersion} is less than the minimum OS version required ${minimumSystemVersion} for version ${currentOSVersion}`);
           return false;
         }
+      } catch (e) {
+        this._logger.warn(`Failed to compare current OS version(${currentOSVersion}) with minimum OS version(${minimumSystemVersion}): ${(e.message || e).toString()}`);
+      }
+    }
+    return true;
+  }
+  async getUpdateInfoAndProvider() {
+    await this.app.whenReady();
+    if (this.clientPromise == null) {
+      this.clientPromise = this.configOnDisk.value.then((it) => (0, providerFactory_1.createClient)(it, this, this.createProviderRuntimeOptions()));
+    }
+    const client = await this.clientPromise;
+    const stagingUserId = await this.stagingUserIdPromise.value;
+    client.setRequestHeaders(this.computeFinalHeaders({ "x-user-staging-id": stagingUserId }));
+    return {
+      info: await client.getLatestVersion(),
+      provider: client
+    };
+  }
+  createProviderRuntimeOptions() {
+    return {
+      isUseMultipleRangeRequest: true,
+      platform: this._testOnlyOptions == null ? process.platform : this._testOnlyOptions.platform,
+      executor: this.httpExecutor
+    };
+  }
+  async doCheckForUpdates() {
+    this.emit("checking-for-update");
+    const result = await this.getUpdateInfoAndProvider();
+    const updateInfo = result.info;
+    if (!await this.isUpdateAvailable(updateInfo)) {
+      this._logger.info(`Update for version ${this.currentVersion.format()} is not available (latest version: ${updateInfo.version}, downgrade is ${this.allowDowngrade ? "allowed" : "disallowed"}).`);
+      this.emit("update-not-available", updateInfo);
+      return {
+        isUpdateAvailable: false,
+        versionInfo: updateInfo,
+        updateInfo
+      };
+    }
+    this.updateInfoAndProvider = result;
+    this.onUpdateAvailable(updateInfo);
+    const cancellationToken = new builder_util_runtime_1$4.CancellationToken();
+    return {
+      isUpdateAvailable: true,
+      versionInfo: updateInfo,
+      updateInfo,
+      cancellationToken,
+      downloadPromise: this.autoDownload ? this.downloadUpdate(cancellationToken) : null
+    };
+  }
+  onUpdateAvailable(updateInfo) {
+    this._logger.info(`Found version ${updateInfo.version} (url: ${(0, builder_util_runtime_1$4.asArray)(updateInfo.files).map((it) => it.url).join(", ")})`);
+    this.emit("update-available", updateInfo);
+  }
+  /**
+   * Start downloading update manually. You can use this method if `autoDownload` option is set to `false`.
+   * @returns {Promise<Array<string>>} Paths to downloaded files.
+   */
+  downloadUpdate(cancellationToken = new builder_util_runtime_1$4.CancellationToken()) {
+    const updateInfoAndProvider = this.updateInfoAndProvider;
+    if (updateInfoAndProvider == null) {
+      const error2 = new Error("Please check update first");
+      this.dispatchError(error2);
+      return Promise.reject(error2);
+    }
+    if (this.downloadPromise != null) {
+      this._logger.info("Downloading update (already in progress)");
+      return this.downloadPromise;
+    }
+    this._logger.info(`Downloading update from ${(0, builder_util_runtime_1$4.asArray)(updateInfoAndProvider.info.files).map((it) => it.url).join(", ")}`);
+    const errorHandler = (e) => {
+      if (!(e instanceof builder_util_runtime_1$4.CancellationError)) {
+        try {
+          this.dispatchError(e);
+        } catch (nestedError) {
+          this._logger.warn(`Cannot dispatch error event: ${nestedError.stack || nestedError}`);
+        }
+      }
+      return e;
+    };
+    this.downloadPromise = this.doDownloadUpdate({
+      updateInfoAndProvider,
+      requestHeaders: this.computeRequestHeaders(updateInfoAndProvider.provider),
+      cancellationToken,
+      disableWebInstaller: this.disableWebInstaller,
+      disableDifferentialDownload: this.disableDifferentialDownload
+    }).catch((e) => {
+      throw errorHandler(e);
+    }).finally(() => {
+      this.downloadPromise = null;
+    });
+    return this.downloadPromise;
+  }
+  dispatchError(e) {
+    this.emit("error", e, (e.stack || e).toString());
+  }
+  dispatchUpdateDownloaded(event) {
+    this.emit(types_1$5.UPDATE_DOWNLOADED, event);
+  }
+  async loadUpdateConfig() {
+    if (this._appUpdateConfigPath == null) {
+      this._appUpdateConfigPath = this.app.appUpdateConfigPath;
+    }
+    return (0, js_yaml_1.load)(await (0, fs_extra_1$4.readFile)(this._appUpdateConfigPath, "utf-8"));
+  }
+  computeRequestHeaders(provider) {
+    const fileExtraDownloadHeaders = provider.fileExtraDownloadHeaders;
+    if (fileExtraDownloadHeaders != null) {
+      const requestHeaders = this.requestHeaders;
+      return requestHeaders == null ? fileExtraDownloadHeaders : {
+        ...fileExtraDownloadHeaders,
+        ...requestHeaders
+      };
+    }
+    return this.computeFinalHeaders({ accept: "*/*" });
+  }
+  async getOrCreateStagingUserId() {
+    const file2 = path$4.join(this.app.userDataPath, ".updaterId");
+    try {
+      const id2 = await (0, fs_extra_1$4.readFile)(file2, "utf-8");
+      if (builder_util_runtime_1$4.UUID.check(id2)) {
+        return id2;
+      } else {
+        this._logger.warn(`Staging user id file exists, but content was invalid: ${id2}`);
+      }
+    } catch (e) {
+      if (e.code !== "ENOENT") {
+        this._logger.warn(`Couldn't read staging user ID, creating a blank one: ${e}`);
+      }
+    }
+    const id = builder_util_runtime_1$4.UUID.v5((0, crypto_1$1.randomBytes)(4096), builder_util_runtime_1$4.UUID.OID);
+    this._logger.info(`Generated new staging user ID: ${id}`);
+    try {
+      await (0, fs_extra_1$4.outputFile)(file2, id);
+    } catch (e) {
+      this._logger.warn(`Couldn't write out staging user ID: ${e}`);
+    }
+    return id;
+  }
+  /** @internal */
+  get isAddNoCacheQuery() {
+    const headers = this.requestHeaders;
+    if (headers == null) {
+      return true;
+    }
+    for (const headerName of Object.keys(headers)) {
+      const s = headerName.toLowerCase();
+      if (s === "authorization" || s === "private-token") {
+        return false;
+      }
+    }
+    return true;
+  }
+  async getOrCreateDownloadHelper() {
+    let result = this.downloadedUpdateHelper;
+    if (result == null) {
+      const dirName = (await this.configOnDisk.value).updaterCacheDirName;
+      const logger = this._logger;
+      if (dirName == null) {
+        logger.error("updaterCacheDirName is not specified in app-update.yml Was app build using at least electron-builder 20.34.0?");
+      }
+      const cacheDir = path$4.join(this.app.baseCachePath, dirName || this.app.name);
+      if (logger.debug != null) {
+        logger.debug(`updater cache dir: ${cacheDir}`);
+      }
+      result = new DownloadedUpdateHelper_1.DownloadedUpdateHelper(cacheDir);
+      this.downloadedUpdateHelper = result;
+    }
+    return result;
+  }
+  async executeDownload(taskOptions) {
+    const fileInfo = taskOptions.fileInfo;
+    const downloadOptions = {
+      headers: taskOptions.downloadUpdateOptions.requestHeaders,
+      cancellationToken: taskOptions.downloadUpdateOptions.cancellationToken,
+      sha2: fileInfo.info.sha2,
+      sha512: fileInfo.info.sha512
+    };
+    if (this.listenerCount(types_1$5.DOWNLOAD_PROGRESS) > 0) {
+      downloadOptions.onProgress = (it) => this.emit(types_1$5.DOWNLOAD_PROGRESS, it);
+    }
+    const updateInfo = taskOptions.downloadUpdateOptions.updateInfoAndProvider.info;
+    const version = updateInfo.version;
+    const packageInfo = fileInfo.packageInfo;
+    function getCacheUpdateFileName() {
+      const urlPath = decodeURIComponent(taskOptions.fileInfo.url.pathname);
+      if (urlPath.endsWith(`.${taskOptions.fileExtension}`)) {
+        return path$4.basename(urlPath);
+      } else {
+        return taskOptions.fileInfo.info.url;
+      }
+    }
+    const downloadedUpdateHelper = await this.getOrCreateDownloadHelper();
+    const cacheDir = downloadedUpdateHelper.cacheDirForPendingUpdate;
+    await (0, fs_extra_1$4.mkdir)(cacheDir, { recursive: true });
+    const updateFileName = getCacheUpdateFileName();
+    let updateFile = path$4.join(cacheDir, updateFileName);
+    const packageFile = packageInfo == null ? null : path$4.join(cacheDir, `package-${version}${path$4.extname(packageInfo.path) || ".7z"}`);
+    const done = async (isSaveCache) => {
+      await downloadedUpdateHelper.setDownloadedFile(updateFile, packageFile, updateInfo, fileInfo, updateFileName, isSaveCache);
+      await taskOptions.done({
+        ...updateInfo,
+        downloadedFile: updateFile
+      });
+      return packageFile == null ? [updateFile] : [updateFile, packageFile];
+    };
+    const log = this._logger;
+    const cachedUpdateFile = await downloadedUpdateHelper.validateDownloadedPath(updateFile, updateInfo, fileInfo, log);
+    if (cachedUpdateFile != null) {
+      updateFile = cachedUpdateFile;
+      return await done(false);
+    }
+    const removeFileIfAny = async () => {
+      await downloadedUpdateHelper.clear().catch(() => {
+      });
+      return await (0, fs_extra_1$4.unlink)(updateFile).catch(() => {
+      });
+    };
+    const tempUpdateFile = await (0, DownloadedUpdateHelper_1.createTempUpdateFile)(`temp-${updateFileName}`, cacheDir, log);
+    try {
+      await taskOptions.task(tempUpdateFile, downloadOptions, packageFile, removeFileIfAny);
+      await (0, builder_util_runtime_1$4.retry)(() => (0, fs_extra_1$4.rename)(tempUpdateFile, updateFile), 60, 500, 0, 0, (error2) => error2 instanceof Error && /^EBUSY:/.test(error2.message));
+    } catch (e) {
+      await removeFileIfAny();
+      if (e instanceof builder_util_runtime_1$4.CancellationError) {
+        log.info("cancelled");
+        this.emit("update-cancelled", updateInfo);
+      }
+      throw e;
+    }
+    log.info(`New version ${version} has been downloaded to ${updateFile}`);
+    return await done(true);
+  }
+  async differentialDownloadInstaller(fileInfo, downloadUpdateOptions, installerPath, provider, oldInstallerFileName) {
+    try {
+      if (this._testOnlyOptions != null && !this._testOnlyOptions.isUseDifferentialDownload) {
+        return true;
+      }
+      const blockmapFileUrls = (0, util_1.blockmapFiles)(fileInfo.url, this.app.version, downloadUpdateOptions.updateInfoAndProvider.info.version);
+      this._logger.info(`Download block maps (old: "${blockmapFileUrls[0]}", new: ${blockmapFileUrls[1]})`);
+      const downloadBlockMap = async (url) => {
+        const data = await this.httpExecutor.downloadToBuffer(url, {
+          headers: downloadUpdateOptions.requestHeaders,
+          cancellationToken: downloadUpdateOptions.cancellationToken
+        });
+        if (data == null || data.length === 0) {
+          throw new Error(`Blockmap "${url.href}" is empty`);
+        }
+        try {
+          return JSON.parse((0, zlib_1$1.gunzipSync)(data).toString());
+        } catch (e) {
+          throw new Error(`Cannot parse blockmap "${url.href}", error: ${e}`);
+        }
+      };
+      const downloadOptions = {
+        newUrl: fileInfo.url,
+        oldFile: path$4.join(this.downloadedUpdateHelper.cacheDir, oldInstallerFileName),
+        logger: this._logger,
+        newFile: installerPath,
+        isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
+        requestHeaders: downloadUpdateOptions.requestHeaders,
+        cancellationToken: downloadUpdateOptions.cancellationToken
+      };
+      if (this.listenerCount(types_1$5.DOWNLOAD_PROGRESS) > 0) {
+        downloadOptions.onProgress = (it) => this.emit(types_1$5.DOWNLOAD_PROGRESS, it);
+      }
+      const blockMapDataList = await Promise.all(blockmapFileUrls.map((u2) => downloadBlockMap(u2)));
+      await new GenericDifferentialDownloader_1.GenericDifferentialDownloader(fileInfo.info, this.httpExecutor, downloadOptions).download(blockMapDataList[0], blockMapDataList[1]);
+      return false;
+    } catch (e) {
+      this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
+      if (this._testOnlyOptions != null) {
+        throw e;
       }
       return true;
     }
-    async getOrCreateDownloadHelper() {
-      let result = this.downloadedUpdateHelper;
-      if (result == null) {
-        const dirName = (await this.configOnDisk.value).updaterCacheDirName;
-        const logger = this._logger;
-        if (dirName == null) {
-          logger.error("updaterCacheDirName is not specified in app-update.yml Was app build using at least electron-builder 20.34.0?");
-        }
-        const cacheDir = path2.join(this.app.baseCachePath, dirName || this.app.name);
-        if (logger.debug != null) {
-          logger.debug(`updater cache dir: ${cacheDir}`);
-        }
-        result = new DownloadedUpdateHelper_1.DownloadedUpdateHelper(cacheDir);
-        this.downloadedUpdateHelper = result;
-      }
-      return result;
-    }
-    async executeDownload(taskOptions) {
-      const fileInfo = taskOptions.fileInfo;
-      const downloadOptions = {
-        headers: taskOptions.downloadUpdateOptions.requestHeaders,
-        cancellationToken: taskOptions.downloadUpdateOptions.cancellationToken,
-        sha2: fileInfo.info.sha2,
-        sha512: fileInfo.info.sha512
-      };
-      if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-        downloadOptions.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-      }
-      const updateInfo = taskOptions.downloadUpdateOptions.updateInfoAndProvider.info;
-      const version = updateInfo.version;
-      const packageInfo = fileInfo.packageInfo;
-      function getCacheUpdateFileName() {
-        const urlPath = decodeURIComponent(taskOptions.fileInfo.url.pathname);
-        if (urlPath.endsWith(`.${taskOptions.fileExtension}`)) {
-          return path2.basename(urlPath);
-        } else {
-          return taskOptions.fileInfo.info.url;
-        }
-      }
-      const downloadedUpdateHelper = await this.getOrCreateDownloadHelper();
-      const cacheDir = downloadedUpdateHelper.cacheDirForPendingUpdate;
-      await (0, fs_extra_12.mkdir)(cacheDir, { recursive: true });
-      const updateFileName = getCacheUpdateFileName();
-      let updateFile = path2.join(cacheDir, updateFileName);
-      const packageFile = packageInfo == null ? null : path2.join(cacheDir, `package-${version}${path2.extname(packageInfo.path) || ".7z"}`);
-      const done = async (isSaveCache) => {
-        await downloadedUpdateHelper.setDownloadedFile(updateFile, packageFile, updateInfo, fileInfo, updateFileName, isSaveCache);
-        await taskOptions.done({
-          ...updateInfo,
-          downloadedFile: updateFile
-        });
-        return packageFile == null ? [updateFile] : [updateFile, packageFile];
-      };
-      const log = this._logger;
-      const cachedUpdateFile = await downloadedUpdateHelper.validateDownloadedPath(updateFile, updateInfo, fileInfo, log);
-      if (cachedUpdateFile != null) {
-        updateFile = cachedUpdateFile;
-        return await done(false);
-      }
-      const removeFileIfAny = async () => {
-        await downloadedUpdateHelper.clear().catch(() => {
-        });
-        return await (0, fs_extra_12.unlink)(updateFile).catch(() => {
-        });
-      };
-      const tempUpdateFile = await (0, DownloadedUpdateHelper_1.createTempUpdateFile)(`temp-${updateFileName}`, cacheDir, log);
-      try {
-        await taskOptions.task(tempUpdateFile, downloadOptions, packageFile, removeFileIfAny);
-        await (0, builder_util_runtime_12.retry)(() => (0, fs_extra_12.rename)(tempUpdateFile, updateFile), 60, 500, 0, 0, (error2) => error2 instanceof Error && /^EBUSY:/.test(error2.message));
-      } catch (e) {
-        await removeFileIfAny();
-        if (e instanceof builder_util_runtime_12.CancellationError) {
-          log.info("cancelled");
-          this.emit("update-cancelled", updateInfo);
-        }
-        throw e;
-      }
-      log.info(`New version ${version} has been downloaded to ${updateFile}`);
-      return await done(true);
-    }
-    async differentialDownloadInstaller(fileInfo, downloadUpdateOptions, installerPath, provider, oldInstallerFileName) {
-      try {
-        if (this._testOnlyOptions != null && !this._testOnlyOptions.isUseDifferentialDownload) {
-          return true;
-        }
-        const blockmapFileUrls = (0, util_12.blockmapFiles)(fileInfo.url, this.app.version, downloadUpdateOptions.updateInfoAndProvider.info.version);
-        this._logger.info(`Download block maps (old: "${blockmapFileUrls[0]}", new: ${blockmapFileUrls[1]})`);
-        const downloadBlockMap = async (url) => {
-          const data = await this.httpExecutor.downloadToBuffer(url, {
-            headers: downloadUpdateOptions.requestHeaders,
-            cancellationToken: downloadUpdateOptions.cancellationToken
-          });
-          if (data == null || data.length === 0) {
-            throw new Error(`Blockmap "${url.href}" is empty`);
-          }
-          try {
-            return JSON.parse((0, zlib_12.gunzipSync)(data).toString());
-          } catch (e) {
-            throw new Error(`Cannot parse blockmap "${url.href}", error: ${e}`);
-          }
-        };
-        const downloadOptions = {
-          newUrl: fileInfo.url,
-          oldFile: path2.join(this.downloadedUpdateHelper.cacheDir, oldInstallerFileName),
-          logger: this._logger,
-          newFile: installerPath,
-          isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
-          requestHeaders: downloadUpdateOptions.requestHeaders,
-          cancellationToken: downloadUpdateOptions.cancellationToken
-        };
-        if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-          downloadOptions.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-        }
-        const blockMapDataList = await Promise.all(blockmapFileUrls.map((u2) => downloadBlockMap(u2)));
-        await new GenericDifferentialDownloader_1.GenericDifferentialDownloader(fileInfo.info, this.httpExecutor, downloadOptions).download(blockMapDataList[0], blockMapDataList[1]);
-        return false;
-      } catch (e) {
-        this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
-        if (this._testOnlyOptions != null) {
-          throw e;
-        }
-        return true;
-      }
-    }
-  };
-  AppUpdater.AppUpdater = AppUpdater$1;
-  function hasPrereleaseComponents(version) {
-    const versionPrereleaseComponent = (0, semver_1.prerelease)(version);
-    return versionPrereleaseComponent != null && versionPrereleaseComponent.length > 0;
   }
-  class NoOpLogger {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    info(message) {
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    warn(message) {
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    error(message) {
-    }
-  }
-  AppUpdater.NoOpLogger = NoOpLogger;
-  return AppUpdater;
 }
-var hasRequiredBaseUpdater;
-function requireBaseUpdater() {
-  if (hasRequiredBaseUpdater) return BaseUpdater;
-  hasRequiredBaseUpdater = 1;
-  Object.defineProperty(BaseUpdater, "__esModule", { value: true });
-  BaseUpdater.BaseUpdater = void 0;
-  const child_process_12 = require$$1$6;
-  const AppUpdater_1 = requireAppUpdater();
-  let BaseUpdater$1 = class BaseUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-      this.quitAndInstallCalled = false;
-      this.quitHandlerAdded = false;
-    }
-    quitAndInstall(isSilent = false, isForceRunAfter = false) {
-      this._logger.info(`Install on explicit quitAndInstall`);
-      const isInstalled = this.install(isSilent, isSilent ? isForceRunAfter : this.autoRunAppAfterInstall);
-      if (isInstalled) {
-        setImmediate(() => {
-          require$$1$5.autoUpdater.emit("before-quit-for-update");
-          this.app.quit();
-        });
-      } else {
-        this.quitAndInstallCalled = false;
-      }
-    }
-    executeDownload(taskOptions) {
-      return super.executeDownload({
-        ...taskOptions,
-        done: (event) => {
-          this.dispatchUpdateDownloaded(event);
-          this.addQuitHandler();
-          return Promise.resolve();
-        }
+AppUpdater$1.AppUpdater = AppUpdater;
+function hasPrereleaseComponents(version) {
+  const versionPrereleaseComponent = (0, semver_1.prerelease)(version);
+  return versionPrereleaseComponent != null && versionPrereleaseComponent.length > 0;
+}
+class NoOpLogger {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  info(message) {
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  warn(message) {
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  error(message) {
+  }
+}
+AppUpdater$1.NoOpLogger = NoOpLogger;
+Object.defineProperty(BaseUpdater$1, "__esModule", { value: true });
+BaseUpdater$1.BaseUpdater = void 0;
+const child_process_1$3 = require$$1$5;
+const AppUpdater_1$1 = AppUpdater$1;
+class BaseUpdater extends AppUpdater_1$1.AppUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+    this.quitAndInstallCalled = false;
+    this.quitHandlerAdded = false;
+  }
+  quitAndInstall(isSilent = false, isForceRunAfter = false) {
+    this._logger.info(`Install on explicit quitAndInstall`);
+    const isInstalled = this.install(isSilent, isSilent ? isForceRunAfter : this.autoRunAppAfterInstall);
+    if (isInstalled) {
+      setImmediate(() => {
+        require$$1$4.autoUpdater.emit("before-quit-for-update");
+        this.app.quit();
       });
+    } else {
+      this.quitAndInstallCalled = false;
     }
-    // must be sync (because quit even handler is not async)
-    install(isSilent = false, isForceRunAfter = false) {
+  }
+  executeDownload(taskOptions) {
+    return super.executeDownload({
+      ...taskOptions,
+      done: (event) => {
+        this.dispatchUpdateDownloaded(event);
+        this.addQuitHandler();
+        return Promise.resolve();
+      }
+    });
+  }
+  get installerPath() {
+    return this.downloadedUpdateHelper == null ? null : this.downloadedUpdateHelper.file;
+  }
+  // must be sync (because quit even handler is not async)
+  install(isSilent = false, isForceRunAfter = false) {
+    if (this.quitAndInstallCalled) {
+      this._logger.warn("install call ignored: quitAndInstallCalled is set to true");
+      return false;
+    }
+    const downloadedUpdateHelper = this.downloadedUpdateHelper;
+    const installerPath = this.installerPath;
+    const downloadedFileInfo = downloadedUpdateHelper == null ? null : downloadedUpdateHelper.downloadedFileInfo;
+    if (installerPath == null || downloadedFileInfo == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
+    }
+    this.quitAndInstallCalled = true;
+    try {
+      this._logger.info(`Install: isSilent: ${isSilent}, isForceRunAfter: ${isForceRunAfter}`);
+      return this.doInstall({
+        isSilent,
+        isForceRunAfter,
+        isAdminRightsRequired: downloadedFileInfo.isAdminRightsRequired
+      });
+    } catch (e) {
+      this.dispatchError(e);
+      return false;
+    }
+  }
+  addQuitHandler() {
+    if (this.quitHandlerAdded || !this.autoInstallOnAppQuit) {
+      return;
+    }
+    this.quitHandlerAdded = true;
+    this.app.onQuit((exitCode) => {
       if (this.quitAndInstallCalled) {
-        this._logger.warn("install call ignored: quitAndInstallCalled is set to true");
-        return false;
-      }
-      const downloadedUpdateHelper = this.downloadedUpdateHelper;
-      const installerPath = downloadedUpdateHelper && downloadedUpdateHelper.file ? process.platform === "linux" ? downloadedUpdateHelper.file.replace(/ /g, "\\ ") : downloadedUpdateHelper.file : null;
-      const downloadedFileInfo = downloadedUpdateHelper == null ? null : downloadedUpdateHelper.downloadedFileInfo;
-      if (installerPath == null || downloadedFileInfo == null) {
-        this.dispatchError(new Error("No valid update available, can't quit and install"));
-        return false;
-      }
-      this.quitAndInstallCalled = true;
-      try {
-        this._logger.info(`Install: isSilent: ${isSilent}, isForceRunAfter: ${isForceRunAfter}`);
-        return this.doInstall({
-          installerPath,
-          isSilent,
-          isForceRunAfter,
-          isAdminRightsRequired: downloadedFileInfo.isAdminRightsRequired
-        });
-      } catch (e) {
-        this.dispatchError(e);
-        return false;
-      }
-    }
-    addQuitHandler() {
-      if (this.quitHandlerAdded || !this.autoInstallOnAppQuit) {
+        this._logger.info("Update installer has already been triggered. Quitting application.");
         return;
       }
-      this.quitHandlerAdded = true;
-      this.app.onQuit((exitCode) => {
-        if (this.quitAndInstallCalled) {
-          this._logger.info("Update installer has already been triggered. Quitting application.");
-          return;
-        }
-        if (!this.autoInstallOnAppQuit) {
-          this._logger.info("Update will not be installed on quit because autoInstallOnAppQuit is set to false.");
-          return;
-        }
-        if (exitCode !== 0) {
-          this._logger.info(`Update will be not installed on quit because application is quitting with exit code ${exitCode}`);
-          return;
-        }
-        this._logger.info("Auto install update on quit");
-        this.install(true, false);
-      });
-    }
-    wrapSudo() {
-      const { name } = this.app;
-      const installComment = `"${name} would like to update"`;
-      const sudo = this.spawnSyncLog("which gksudo || which kdesudo || which pkexec || which beesu");
-      const command = [sudo];
-      if (/kdesudo/i.test(sudo)) {
-        command.push("--comment", installComment);
-        command.push("-c");
-      } else if (/gksudo/i.test(sudo)) {
-        command.push("--message", installComment);
-      } else if (/pkexec/i.test(sudo)) {
-        command.push("--disable-internal-agent");
+      if (!this.autoInstallOnAppQuit) {
+        this._logger.info("Update will not be installed on quit because autoInstallOnAppQuit is set to false.");
+        return;
       }
-      return command.join(" ");
+      if (exitCode !== 0) {
+        this._logger.info(`Update will be not installed on quit because application is quitting with exit code ${exitCode}`);
+        return;
+      }
+      this._logger.info("Auto install update on quit");
+      this.install(true, false);
+    });
+  }
+  wrapSudo() {
+    const { name } = this.app;
+    const installComment = `"${name} would like to update"`;
+    const sudo = this.spawnSyncLog("which gksudo || which kdesudo || which pkexec || which beesu");
+    const command = [sudo];
+    if (/kdesudo/i.test(sudo)) {
+      command.push("--comment", installComment);
+      command.push("-c");
+    } else if (/gksudo/i.test(sudo)) {
+      command.push("--message", installComment);
+    } else if (/pkexec/i.test(sudo)) {
+      command.push("--disable-internal-agent");
     }
-    spawnSyncLog(cmd, args = [], env = {}) {
-      this._logger.info(`Executing: ${cmd} with args: ${args}`);
-      const response = (0, child_process_12.spawnSync)(cmd, args, {
-        env: { ...process.env, ...env },
-        encoding: "utf-8",
-        shell: true
-      });
-      return response.stdout.trim();
+    return command.join(" ");
+  }
+  spawnSyncLog(cmd, args = [], env = {}) {
+    this._logger.info(`Executing: ${cmd} with args: ${args}`);
+    const response = (0, child_process_1$3.spawnSync)(cmd, args, {
+      env: { ...process.env, ...env },
+      encoding: "utf-8",
+      shell: true
+    });
+    const { error: error2, status, stdout, stderr } = response;
+    if (error2 != null) {
+      this._logger.error(stderr);
+      throw error2;
+    } else if (status != null && status !== 0) {
+      this._logger.error(stderr);
+      throw new Error(`Command ${cmd} exited with code ${status}`);
     }
-    /**
-     * This handles both node 8 and node 10 way of emitting error when spawning a process
-     *   - node 8: Throws the error
-     *   - node 10: Emit the error(Need to listen with on)
-     */
-    // https://github.com/electron-userland/electron-builder/issues/1129
-    // Node 8 sends errors: https://nodejs.org/dist/latest-v8.x/docs/api/errors.html#errors_common_system_errors
-    async spawnLog(cmd, args = [], env = void 0, stdio = "ignore") {
-      this._logger.info(`Executing: ${cmd} with args: ${args}`);
-      return new Promise((resolve, reject) => {
-        try {
-          const params = { stdio, env, detached: true };
-          const p = (0, child_process_12.spawn)(cmd, args, params);
-          p.on("error", (error2) => {
-            reject(error2);
-          });
-          p.unref();
-          if (p.pid !== void 0) {
-            resolve(true);
-          }
-        } catch (error2) {
+    return stdout.trim();
+  }
+  /**
+   * This handles both node 8 and node 10 way of emitting error when spawning a process
+   *   - node 8: Throws the error
+   *   - node 10: Emit the error(Need to listen with on)
+   */
+  // https://github.com/electron-userland/electron-builder/issues/1129
+  // Node 8 sends errors: https://nodejs.org/dist/latest-v8.x/docs/api/errors.html#errors_common_system_errors
+  async spawnLog(cmd, args = [], env = void 0, stdio = "ignore") {
+    this._logger.info(`Executing: ${cmd} with args: ${args}`);
+    return new Promise((resolve, reject) => {
+      try {
+        const params = { stdio, env, detached: true };
+        const p = (0, child_process_1$3.spawn)(cmd, args, params);
+        p.on("error", (error2) => {
           reject(error2);
+        });
+        p.unref();
+        if (p.pid !== void 0) {
+          resolve(true);
         }
-      });
-    }
-  };
-  BaseUpdater.BaseUpdater = BaseUpdater$1;
-  return BaseUpdater;
+      } catch (error2) {
+        reject(error2);
+      }
+    });
+  }
 }
-var AppImageUpdater = {};
+BaseUpdater$1.BaseUpdater = BaseUpdater;
+var AppImageUpdater$1 = {};
 var FileWithEmbeddedBlockMapDifferentialDownloader$1 = {};
 Object.defineProperty(FileWithEmbeddedBlockMapDifferentialDownloader$1, "__esModule", { value: true });
 FileWithEmbeddedBlockMapDifferentialDownloader$1.FileWithEmbeddedBlockMapDifferentialDownloader = void 0;
-const fs_extra_1 = lib;
+const fs_extra_1$3 = lib;
 const DifferentialDownloader_1 = DifferentialDownloader$1;
-const zlib_1 = require$$15;
+const zlib_1 = require$$14;
 class FileWithEmbeddedBlockMapDifferentialDownloader extends DifferentialDownloader_1.DifferentialDownloader {
   async download() {
     const packageInfo = this.blockAwareFileInfo;
@@ -12835,463 +12910,514 @@ function readBlockMap(data) {
   return JSON.parse((0, zlib_1.inflateRawSync)(data).toString());
 }
 async function readEmbeddedBlockMapData(file2) {
-  const fd = await (0, fs_extra_1.open)(file2, "r");
+  const fd = await (0, fs_extra_1$3.open)(file2, "r");
   try {
-    const fileSize = (await (0, fs_extra_1.fstat)(fd)).size;
+    const fileSize = (await (0, fs_extra_1$3.fstat)(fd)).size;
     const sizeBuffer = Buffer.allocUnsafe(4);
-    await (0, fs_extra_1.read)(fd, sizeBuffer, 0, sizeBuffer.length, fileSize - sizeBuffer.length);
+    await (0, fs_extra_1$3.read)(fd, sizeBuffer, 0, sizeBuffer.length, fileSize - sizeBuffer.length);
     const dataBuffer = Buffer.allocUnsafe(sizeBuffer.readUInt32BE(0));
-    await (0, fs_extra_1.read)(fd, dataBuffer, 0, dataBuffer.length, fileSize - sizeBuffer.length - dataBuffer.length);
-    await (0, fs_extra_1.close)(fd);
+    await (0, fs_extra_1$3.read)(fd, dataBuffer, 0, dataBuffer.length, fileSize - sizeBuffer.length - dataBuffer.length);
+    await (0, fs_extra_1$3.close)(fd);
     return readBlockMap(dataBuffer);
   } catch (e) {
-    await (0, fs_extra_1.close)(fd);
+    await (0, fs_extra_1$3.close)(fd);
     throw e;
   }
 }
-var hasRequiredAppImageUpdater;
-function requireAppImageUpdater() {
-  if (hasRequiredAppImageUpdater) return AppImageUpdater;
-  hasRequiredAppImageUpdater = 1;
-  Object.defineProperty(AppImageUpdater, "__esModule", { value: true });
-  AppImageUpdater.AppImageUpdater = void 0;
-  const builder_util_runtime_12 = out;
-  const child_process_12 = require$$1$6;
-  const fs_extra_12 = lib;
-  const fs_12 = require$$1$2;
-  const path2 = require$$1$4;
-  const BaseUpdater_1 = requireBaseUpdater();
-  const FileWithEmbeddedBlockMapDifferentialDownloader_1 = FileWithEmbeddedBlockMapDifferentialDownloader$1;
-  const main_1 = requireMain();
-  const Provider_12 = Provider$1;
-  let AppImageUpdater$1 = class AppImageUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-    }
-    isUpdaterActive() {
-      if (process.env["APPIMAGE"] == null) {
-        if (process.env["SNAP"] == null) {
-          this._logger.warn("APPIMAGE env is not defined, current application is not an AppImage");
-        } else {
-          this._logger.info("SNAP env is defined, updater is disabled");
-        }
-        return false;
-      }
-      return super.isUpdaterActive();
-    }
-    /*** @private */
-    doDownloadUpdate(downloadUpdateOptions) {
-      const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
-      const fileInfo = (0, Provider_12.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "AppImage", ["rpm", "deb"]);
-      return this.executeDownload({
-        fileExtension: "AppImage",
-        fileInfo,
-        downloadUpdateOptions,
-        task: async (updateFile, downloadOptions) => {
-          const oldFile = process.env["APPIMAGE"];
-          if (oldFile == null) {
-            throw (0, builder_util_runtime_12.newError)("APPIMAGE env is not defined", "ERR_UPDATER_OLD_FILE_NOT_FOUND");
-          }
-          let isDownloadFull = false;
-          try {
-            const downloadOptions2 = {
-              newUrl: fileInfo.url,
-              oldFile,
-              logger: this._logger,
-              newFile: updateFile,
-              isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
-              requestHeaders: downloadUpdateOptions.requestHeaders,
-              cancellationToken: downloadUpdateOptions.cancellationToken
-            };
-            if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-              downloadOptions2.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-            }
-            await new FileWithEmbeddedBlockMapDifferentialDownloader_1.FileWithEmbeddedBlockMapDifferentialDownloader(fileInfo.info, this.httpExecutor, downloadOptions2).download();
-          } catch (e) {
-            this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
-            isDownloadFull = process.platform === "linux";
-          }
-          if (isDownloadFull) {
-            await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
-          }
-          await (0, fs_extra_12.chmod)(updateFile, 493);
-        }
-      });
-    }
-    doInstall(options) {
-      const appImageFile = process.env["APPIMAGE"];
-      if (appImageFile == null) {
-        throw (0, builder_util_runtime_12.newError)("APPIMAGE env is not defined", "ERR_UPDATER_OLD_FILE_NOT_FOUND");
-      }
-      (0, fs_12.unlinkSync)(appImageFile);
-      let destination;
-      const existingBaseName = path2.basename(appImageFile);
-      if (path2.basename(options.installerPath) === existingBaseName || !/\d+\.\d+\.\d+/.test(existingBaseName)) {
-        destination = appImageFile;
+Object.defineProperty(AppImageUpdater$1, "__esModule", { value: true });
+AppImageUpdater$1.AppImageUpdater = void 0;
+const builder_util_runtime_1$3 = out;
+const child_process_1$2 = require$$1$5;
+const fs_extra_1$2 = lib;
+const fs_1$1 = require$$1;
+const path$3 = require$$1$1;
+const BaseUpdater_1$4 = BaseUpdater$1;
+const FileWithEmbeddedBlockMapDifferentialDownloader_1$1 = FileWithEmbeddedBlockMapDifferentialDownloader$1;
+const Provider_1$5 = Provider$1;
+const types_1$4 = types;
+class AppImageUpdater extends BaseUpdater_1$4.BaseUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+  }
+  isUpdaterActive() {
+    if (process.env["APPIMAGE"] == null) {
+      if (process.env["SNAP"] == null) {
+        this._logger.warn("APPIMAGE env is not defined, current application is not an AppImage");
       } else {
-        destination = path2.join(path2.dirname(appImageFile), path2.basename(options.installerPath));
+        this._logger.info("SNAP env is defined, updater is disabled");
       }
-      (0, child_process_12.execFileSync)("mv", ["-f", options.installerPath, destination]);
-      if (destination !== appImageFile) {
-        this.emit("appimage-filename-updated", destination);
-      }
-      const env = {
-        ...process.env,
-        APPIMAGE_SILENT_INSTALL: "true"
-      };
-      if (options.isForceRunAfter) {
-        this.spawnLog(destination, [], env);
-      } else {
-        env.APPIMAGE_EXIT_AFTER_INSTALL = "true";
-        (0, child_process_12.execFileSync)(destination, [], { env });
-      }
-      return true;
+      return false;
     }
-  };
-  AppImageUpdater.AppImageUpdater = AppImageUpdater$1;
-  return AppImageUpdater;
-}
-var DebUpdater = {};
-var hasRequiredDebUpdater;
-function requireDebUpdater() {
-  if (hasRequiredDebUpdater) return DebUpdater;
-  hasRequiredDebUpdater = 1;
-  Object.defineProperty(DebUpdater, "__esModule", { value: true });
-  DebUpdater.DebUpdater = void 0;
-  const BaseUpdater_1 = requireBaseUpdater();
-  const main_1 = requireMain();
-  const Provider_12 = Provider$1;
-  let DebUpdater$1 = class DebUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-    }
-    /*** @private */
-    doDownloadUpdate(downloadUpdateOptions) {
-      const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
-      const fileInfo = (0, Provider_12.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "deb", ["AppImage", "rpm"]);
-      return this.executeDownload({
-        fileExtension: "deb",
-        fileInfo,
-        downloadUpdateOptions,
-        task: async (updateFile, downloadOptions) => {
-          if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-            downloadOptions.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-          }
+    return super.isUpdaterActive();
+  }
+  /*** @private */
+  doDownloadUpdate(downloadUpdateOptions) {
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const fileInfo = (0, Provider_1$5.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "AppImage", ["rpm", "deb", "pacman"]);
+    return this.executeDownload({
+      fileExtension: "AppImage",
+      fileInfo,
+      downloadUpdateOptions,
+      task: async (updateFile, downloadOptions) => {
+        const oldFile = process.env["APPIMAGE"];
+        if (oldFile == null) {
+          throw (0, builder_util_runtime_1$3.newError)("APPIMAGE env is not defined", "ERR_UPDATER_OLD_FILE_NOT_FOUND");
+        }
+        if (downloadUpdateOptions.disableDifferentialDownload || await this.downloadDifferential(fileInfo, oldFile, updateFile, provider, downloadUpdateOptions)) {
           await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
         }
-      });
-    }
-    doInstall(options) {
-      const sudo = this.wrapSudo();
-      const wrapper = /pkexec/i.test(sudo) ? "" : `"`;
-      const cmd = ["dpkg", "-i", options.installerPath, "||", "apt-get", "install", "-f", "-y"];
-      this.spawnSyncLog(sudo, [`${wrapper}/bin/bash`, "-c", `'${cmd.join(" ")}'${wrapper}`]);
-      if (options.isForceRunAfter) {
-        this.app.relaunch();
+        await (0, fs_extra_1$2.chmod)(updateFile, 493);
       }
-      return true;
-    }
-  };
-  DebUpdater.DebUpdater = DebUpdater$1;
-  return DebUpdater;
-}
-var RpmUpdater = {};
-var hasRequiredRpmUpdater;
-function requireRpmUpdater() {
-  if (hasRequiredRpmUpdater) return RpmUpdater;
-  hasRequiredRpmUpdater = 1;
-  Object.defineProperty(RpmUpdater, "__esModule", { value: true });
-  RpmUpdater.RpmUpdater = void 0;
-  const BaseUpdater_1 = requireBaseUpdater();
-  const main_1 = requireMain();
-  const Provider_12 = Provider$1;
-  let RpmUpdater$1 = class RpmUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-    }
-    /*** @private */
-    doDownloadUpdate(downloadUpdateOptions) {
-      const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
-      const fileInfo = (0, Provider_12.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "rpm", ["AppImage", "deb"]);
-      return this.executeDownload({
-        fileExtension: "rpm",
-        fileInfo,
-        downloadUpdateOptions,
-        task: async (updateFile, downloadOptions) => {
-          if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-            downloadOptions.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-          }
-          await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
-        }
-      });
-    }
-    doInstall(options) {
-      const upgradePath = options.installerPath;
-      const sudo = this.wrapSudo();
-      const wrapper = /pkexec/i.test(sudo) ? "" : `"`;
-      const packageManager = this.spawnSyncLog("which zypper");
-      let cmd;
-      if (!packageManager) {
-        const packageManager2 = this.spawnSyncLog("which dnf || which yum");
-        cmd = [packageManager2, "-y", "install", upgradePath];
-      } else {
-        cmd = [packageManager, "--no-refresh", "install", "--allow-unsigned-rpm", "-y", "-f", upgradePath];
-      }
-      this.spawnSyncLog(sudo, [`${wrapper}/bin/bash`, "-c", `'${cmd.join(" ")}'${wrapper}`]);
-      if (options.isForceRunAfter) {
-        this.app.relaunch();
-      }
-      return true;
-    }
-  };
-  RpmUpdater.RpmUpdater = RpmUpdater$1;
-  return RpmUpdater;
-}
-var MacUpdater = {};
-var hasRequiredMacUpdater;
-function requireMacUpdater() {
-  if (hasRequiredMacUpdater) return MacUpdater;
-  hasRequiredMacUpdater = 1;
-  Object.defineProperty(MacUpdater, "__esModule", { value: true });
-  MacUpdater.MacUpdater = void 0;
-  const builder_util_runtime_12 = out;
-  const fs_extra_12 = lib;
-  const fs_12 = require$$1$2;
-  const path2 = require$$1$4;
-  const http_1 = require$$4$1;
-  const AppUpdater_1 = requireAppUpdater();
-  const Provider_12 = Provider$1;
-  const child_process_12 = require$$1$6;
-  const crypto_12 = require$$0$2;
-  let MacUpdater$1 = class MacUpdater extends AppUpdater_1.AppUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-      this.nativeUpdater = require$$1$5.autoUpdater;
-      this.squirrelDownloadedUpdate = false;
-      this.nativeUpdater.on("error", (it) => {
-        this._logger.warn(it);
-        this.emit("error", it);
-      });
-      this.nativeUpdater.on("update-downloaded", () => {
-        this.squirrelDownloadedUpdate = true;
-        this.debug("nativeUpdater.update-downloaded");
-      });
-    }
-    debug(message) {
-      if (this._logger.debug != null) {
-        this._logger.debug(message);
-      }
-    }
-    closeServerIfExists() {
-      if (this.server) {
-        this.debug("Closing proxy server");
-        this.server.close((err) => {
-          if (err) {
-            this.debug("proxy server wasn't already open, probably attempted closing again as a safety check before quit");
-          }
-        });
-      }
-    }
-    async doDownloadUpdate(downloadUpdateOptions) {
-      let files = downloadUpdateOptions.updateInfoAndProvider.provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info);
-      const log = this._logger;
-      const sysctlRosettaInfoKey = "sysctl.proc_translated";
-      let isRosetta = false;
-      try {
-        this.debug("Checking for macOS Rosetta environment");
-        const result = (0, child_process_12.execFileSync)("sysctl", [sysctlRosettaInfoKey], { encoding: "utf8" });
-        isRosetta = result.includes(`${sysctlRosettaInfoKey}: 1`);
-        log.info(`Checked for macOS Rosetta environment (isRosetta=${isRosetta})`);
-      } catch (e) {
-        log.warn(`sysctl shell command to check for macOS Rosetta environment failed: ${e}`);
-      }
-      let isArm64Mac = false;
-      try {
-        this.debug("Checking for arm64 in uname");
-        const result = (0, child_process_12.execFileSync)("uname", ["-a"], { encoding: "utf8" });
-        const isArm = result.includes("ARM");
-        log.info(`Checked 'uname -a': arm64=${isArm}`);
-        isArm64Mac = isArm64Mac || isArm;
-      } catch (e) {
-        log.warn(`uname shell command to check for arm64 failed: ${e}`);
-      }
-      isArm64Mac = isArm64Mac || process.arch === "arm64" || isRosetta;
-      const isArm64 = (file2) => {
-        var _a;
-        return file2.url.pathname.includes("arm64") || ((_a = file2.info.url) === null || _a === void 0 ? void 0 : _a.includes("arm64"));
+    });
+  }
+  async downloadDifferential(fileInfo, oldFile, updateFile, provider, downloadUpdateOptions) {
+    try {
+      const downloadOptions = {
+        newUrl: fileInfo.url,
+        oldFile,
+        logger: this._logger,
+        newFile: updateFile,
+        isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
+        requestHeaders: downloadUpdateOptions.requestHeaders,
+        cancellationToken: downloadUpdateOptions.cancellationToken
       };
-      if (isArm64Mac && files.some(isArm64)) {
-        files = files.filter((file2) => isArm64Mac === isArm64(file2));
-      } else {
-        files = files.filter((file2) => !isArm64(file2));
+      if (this.listenerCount(types_1$4.DOWNLOAD_PROGRESS) > 0) {
+        downloadOptions.onProgress = (it) => this.emit(types_1$4.DOWNLOAD_PROGRESS, it);
       }
-      const zipFileInfo = (0, Provider_12.findFile)(files, "zip", ["pkg", "dmg"]);
-      if (zipFileInfo == null) {
-        throw (0, builder_util_runtime_12.newError)(`ZIP file not provided: ${(0, builder_util_runtime_12.safeStringifyJson)(files)}`, "ERR_UPDATER_ZIP_FILE_NOT_FOUND");
+      await new FileWithEmbeddedBlockMapDifferentialDownloader_1$1.FileWithEmbeddedBlockMapDifferentialDownloader(fileInfo.info, this.httpExecutor, downloadOptions).download();
+      return false;
+    } catch (e) {
+      this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
+      return process.platform === "linux";
+    }
+  }
+  doInstall(options) {
+    const appImageFile = process.env["APPIMAGE"];
+    if (appImageFile == null) {
+      throw (0, builder_util_runtime_1$3.newError)("APPIMAGE env is not defined", "ERR_UPDATER_OLD_FILE_NOT_FOUND");
+    }
+    (0, fs_1$1.unlinkSync)(appImageFile);
+    let destination;
+    const existingBaseName = path$3.basename(appImageFile);
+    const installerPath = this.installerPath;
+    if (installerPath == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
+    }
+    if (path$3.basename(installerPath) === existingBaseName || !/\d+\.\d+\.\d+/.test(existingBaseName)) {
+      destination = appImageFile;
+    } else {
+      destination = path$3.join(path$3.dirname(appImageFile), path$3.basename(installerPath));
+    }
+    (0, child_process_1$2.execFileSync)("mv", ["-f", installerPath, destination]);
+    if (destination !== appImageFile) {
+      this.emit("appimage-filename-updated", destination);
+    }
+    const env = {
+      ...process.env,
+      APPIMAGE_SILENT_INSTALL: "true"
+    };
+    if (options.isForceRunAfter) {
+      this.spawnLog(destination, [], env);
+    } else {
+      env.APPIMAGE_EXIT_AFTER_INSTALL = "true";
+      (0, child_process_1$2.execFileSync)(destination, [], { env });
+    }
+    return true;
+  }
+}
+AppImageUpdater$1.AppImageUpdater = AppImageUpdater;
+var DebUpdater$1 = {};
+Object.defineProperty(DebUpdater$1, "__esModule", { value: true });
+DebUpdater$1.DebUpdater = void 0;
+const BaseUpdater_1$3 = BaseUpdater$1;
+const Provider_1$4 = Provider$1;
+const types_1$3 = types;
+class DebUpdater extends BaseUpdater_1$3.BaseUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+  }
+  /*** @private */
+  doDownloadUpdate(downloadUpdateOptions) {
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const fileInfo = (0, Provider_1$4.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "deb", ["AppImage", "rpm", "pacman"]);
+    return this.executeDownload({
+      fileExtension: "deb",
+      fileInfo,
+      downloadUpdateOptions,
+      task: async (updateFile, downloadOptions) => {
+        if (this.listenerCount(types_1$3.DOWNLOAD_PROGRESS) > 0) {
+          downloadOptions.onProgress = (it) => this.emit(types_1$3.DOWNLOAD_PROGRESS, it);
+        }
+        await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
       }
-      const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
-      const CURRENT_MAC_APP_ZIP_FILE_NAME = "update.zip";
-      return this.executeDownload({
-        fileExtension: "zip",
-        fileInfo: zipFileInfo,
-        downloadUpdateOptions,
-        task: async (destinationFile, downloadOptions) => {
-          const cachedUpdateFilePath = path2.join(this.downloadedUpdateHelper.cacheDir, CURRENT_MAC_APP_ZIP_FILE_NAME);
-          const canDifferentialDownload = () => {
-            if (!(0, fs_extra_12.pathExistsSync)(cachedUpdateFilePath)) {
-              log.info("Unable to locate previous update.zip for differential download (is this first install?), falling back to full download");
-              return false;
-            }
-            return !downloadUpdateOptions.disableDifferentialDownload;
-          };
-          let differentialDownloadFailed = true;
-          if (canDifferentialDownload()) {
-            differentialDownloadFailed = await this.differentialDownloadInstaller(zipFileInfo, downloadUpdateOptions, destinationFile, provider, CURRENT_MAC_APP_ZIP_FILE_NAME);
-          }
-          if (differentialDownloadFailed) {
-            await this.httpExecutor.download(zipFileInfo.url, destinationFile, downloadOptions);
-          }
-        },
-        done: (event) => {
-          if (!downloadUpdateOptions.disableDifferentialDownload) {
-            try {
-              const cachedUpdateFilePath = path2.join(this.downloadedUpdateHelper.cacheDir, CURRENT_MAC_APP_ZIP_FILE_NAME);
-              (0, fs_12.copyFileSync)(event.downloadedFile, cachedUpdateFilePath);
-            } catch (error2) {
-              this._logger.warn(`Unable to copy file for caching for future differential downloads: ${error2.message}`);
-            }
-          }
-          return this.updateDownloaded(zipFileInfo, event);
+    });
+  }
+  get installerPath() {
+    var _a, _b;
+    return (_b = (_a = super.installerPath) === null || _a === void 0 ? void 0 : _a.replace(/ /g, "\\ ")) !== null && _b !== void 0 ? _b : null;
+  }
+  doInstall(options) {
+    const sudo = this.wrapSudo();
+    const wrapper = /pkexec/i.test(sudo) ? "" : `"`;
+    const installerPath = this.installerPath;
+    if (installerPath == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
+    }
+    const cmd = ["dpkg", "-i", installerPath, "||", "apt-get", "install", "-f", "-y"];
+    this.spawnSyncLog(sudo, [`${wrapper}/bin/bash`, "-c", `'${cmd.join(" ")}'${wrapper}`]);
+    if (options.isForceRunAfter) {
+      this.app.relaunch();
+    }
+    return true;
+  }
+}
+DebUpdater$1.DebUpdater = DebUpdater;
+var PacmanUpdater$1 = {};
+Object.defineProperty(PacmanUpdater$1, "__esModule", { value: true });
+PacmanUpdater$1.PacmanUpdater = void 0;
+const BaseUpdater_1$2 = BaseUpdater$1;
+const types_1$2 = types;
+const Provider_1$3 = Provider$1;
+class PacmanUpdater extends BaseUpdater_1$2.BaseUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+  }
+  /*** @private */
+  doDownloadUpdate(downloadUpdateOptions) {
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const fileInfo = (0, Provider_1$3.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "pacman", ["AppImage", "deb", "rpm"]);
+    return this.executeDownload({
+      fileExtension: "pacman",
+      fileInfo,
+      downloadUpdateOptions,
+      task: async (updateFile, downloadOptions) => {
+        if (this.listenerCount(types_1$2.DOWNLOAD_PROGRESS) > 0) {
+          downloadOptions.onProgress = (it) => this.emit(types_1$2.DOWNLOAD_PROGRESS, it);
+        }
+        await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
+      }
+    });
+  }
+  get installerPath() {
+    var _a, _b;
+    return (_b = (_a = super.installerPath) === null || _a === void 0 ? void 0 : _a.replace(/ /g, "\\ ")) !== null && _b !== void 0 ? _b : null;
+  }
+  doInstall(options) {
+    const sudo = this.wrapSudo();
+    const wrapper = /pkexec/i.test(sudo) ? "" : `"`;
+    const installerPath = this.installerPath;
+    if (installerPath == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
+    }
+    const cmd = ["pacman", "-U", "--noconfirm", installerPath];
+    this.spawnSyncLog(sudo, [`${wrapper}/bin/bash`, "-c", `'${cmd.join(" ")}'${wrapper}`]);
+    if (options.isForceRunAfter) {
+      this.app.relaunch();
+    }
+    return true;
+  }
+}
+PacmanUpdater$1.PacmanUpdater = PacmanUpdater;
+var RpmUpdater$1 = {};
+Object.defineProperty(RpmUpdater$1, "__esModule", { value: true });
+RpmUpdater$1.RpmUpdater = void 0;
+const BaseUpdater_1$1 = BaseUpdater$1;
+const types_1$1 = types;
+const Provider_1$2 = Provider$1;
+class RpmUpdater extends BaseUpdater_1$1.BaseUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+  }
+  /*** @private */
+  doDownloadUpdate(downloadUpdateOptions) {
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const fileInfo = (0, Provider_1$2.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "rpm", ["AppImage", "deb", "pacman"]);
+    return this.executeDownload({
+      fileExtension: "rpm",
+      fileInfo,
+      downloadUpdateOptions,
+      task: async (updateFile, downloadOptions) => {
+        if (this.listenerCount(types_1$1.DOWNLOAD_PROGRESS) > 0) {
+          downloadOptions.onProgress = (it) => this.emit(types_1$1.DOWNLOAD_PROGRESS, it);
+        }
+        await this.httpExecutor.download(fileInfo.url, updateFile, downloadOptions);
+      }
+    });
+  }
+  get installerPath() {
+    var _a, _b;
+    return (_b = (_a = super.installerPath) === null || _a === void 0 ? void 0 : _a.replace(/ /g, "\\ ")) !== null && _b !== void 0 ? _b : null;
+  }
+  doInstall(options) {
+    const sudo = this.wrapSudo();
+    const wrapper = /pkexec/i.test(sudo) ? "" : `"`;
+    const packageManager = this.spawnSyncLog("which zypper");
+    const installerPath = this.installerPath;
+    if (installerPath == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
+    }
+    let cmd;
+    if (!packageManager) {
+      const packageManager2 = this.spawnSyncLog("which dnf || which yum");
+      cmd = [packageManager2, "-y", "install", installerPath];
+    } else {
+      cmd = [packageManager, "--no-refresh", "install", "--allow-unsigned-rpm", "-y", "-f", installerPath];
+    }
+    this.spawnSyncLog(sudo, [`${wrapper}/bin/bash`, "-c", `'${cmd.join(" ")}'${wrapper}`]);
+    if (options.isForceRunAfter) {
+      this.app.relaunch();
+    }
+    return true;
+  }
+}
+RpmUpdater$1.RpmUpdater = RpmUpdater;
+var MacUpdater$1 = {};
+Object.defineProperty(MacUpdater$1, "__esModule", { value: true });
+MacUpdater$1.MacUpdater = void 0;
+const builder_util_runtime_1$2 = out;
+const fs_extra_1$1 = lib;
+const fs_1 = require$$1;
+const path$2 = require$$1$1;
+const http_1 = require$$4$2;
+const AppUpdater_1 = AppUpdater$1;
+const Provider_1$1 = Provider$1;
+const child_process_1$1 = require$$1$5;
+const crypto_1 = require$$0$3;
+class MacUpdater extends AppUpdater_1.AppUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+    this.nativeUpdater = require$$1$4.autoUpdater;
+    this.squirrelDownloadedUpdate = false;
+    this.nativeUpdater.on("error", (it) => {
+      this._logger.warn(it);
+      this.emit("error", it);
+    });
+    this.nativeUpdater.on("update-downloaded", () => {
+      this.squirrelDownloadedUpdate = true;
+      this.debug("nativeUpdater.update-downloaded");
+    });
+  }
+  debug(message) {
+    if (this._logger.debug != null) {
+      this._logger.debug(message);
+    }
+  }
+  closeServerIfExists() {
+    if (this.server) {
+      this.debug("Closing proxy server");
+      this.server.close((err) => {
+        if (err) {
+          this.debug("proxy server wasn't already open, probably attempted closing again as a safety check before quit");
         }
       });
     }
-    async updateDownloaded(zipFileInfo, event) {
+  }
+  async doDownloadUpdate(downloadUpdateOptions) {
+    let files = downloadUpdateOptions.updateInfoAndProvider.provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info);
+    const log = this._logger;
+    const sysctlRosettaInfoKey = "sysctl.proc_translated";
+    let isRosetta = false;
+    try {
+      this.debug("Checking for macOS Rosetta environment");
+      const result = (0, child_process_1$1.execFileSync)("sysctl", [sysctlRosettaInfoKey], { encoding: "utf8" });
+      isRosetta = result.includes(`${sysctlRosettaInfoKey}: 1`);
+      log.info(`Checked for macOS Rosetta environment (isRosetta=${isRosetta})`);
+    } catch (e) {
+      log.warn(`sysctl shell command to check for macOS Rosetta environment failed: ${e}`);
+    }
+    let isArm64Mac = false;
+    try {
+      this.debug("Checking for arm64 in uname");
+      const result = (0, child_process_1$1.execFileSync)("uname", ["-a"], { encoding: "utf8" });
+      const isArm = result.includes("ARM");
+      log.info(`Checked 'uname -a': arm64=${isArm}`);
+      isArm64Mac = isArm64Mac || isArm;
+    } catch (e) {
+      log.warn(`uname shell command to check for arm64 failed: ${e}`);
+    }
+    isArm64Mac = isArm64Mac || process.arch === "arm64" || isRosetta;
+    const isArm64 = (file2) => {
       var _a;
-      const downloadedFile = event.downloadedFile;
-      const updateFileSize = (_a = zipFileInfo.info.size) !== null && _a !== void 0 ? _a : (await (0, fs_extra_12.stat)(downloadedFile)).size;
-      const log = this._logger;
-      const logContext = `fileToProxy=${zipFileInfo.url.href}`;
-      this.closeServerIfExists();
-      this.debug(`Creating proxy server for native Squirrel.Mac (${logContext})`);
-      this.server = (0, http_1.createServer)();
-      this.debug(`Proxy server for native Squirrel.Mac is created (${logContext})`);
-      this.server.on("close", () => {
-        log.info(`Proxy server for native Squirrel.Mac is closed (${logContext})`);
-      });
-      const getServerUrl = (s) => {
-        const address = s.address();
-        if (typeof address === "string") {
-          return address;
+      return file2.url.pathname.includes("arm64") || ((_a = file2.info.url) === null || _a === void 0 ? void 0 : _a.includes("arm64"));
+    };
+    if (isArm64Mac && files.some(isArm64)) {
+      files = files.filter((file2) => isArm64Mac === isArm64(file2));
+    } else {
+      files = files.filter((file2) => !isArm64(file2));
+    }
+    const zipFileInfo = (0, Provider_1$1.findFile)(files, "zip", ["pkg", "dmg"]);
+    if (zipFileInfo == null) {
+      throw (0, builder_util_runtime_1$2.newError)(`ZIP file not provided: ${(0, builder_util_runtime_1$2.safeStringifyJson)(files)}`, "ERR_UPDATER_ZIP_FILE_NOT_FOUND");
+    }
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const CURRENT_MAC_APP_ZIP_FILE_NAME = "update.zip";
+    return this.executeDownload({
+      fileExtension: "zip",
+      fileInfo: zipFileInfo,
+      downloadUpdateOptions,
+      task: async (destinationFile, downloadOptions) => {
+        const cachedUpdateFilePath = path$2.join(this.downloadedUpdateHelper.cacheDir, CURRENT_MAC_APP_ZIP_FILE_NAME);
+        const canDifferentialDownload = () => {
+          if (!(0, fs_extra_1$1.pathExistsSync)(cachedUpdateFilePath)) {
+            log.info("Unable to locate previous update.zip for differential download (is this first install?), falling back to full download");
+            return false;
+          }
+          return !downloadUpdateOptions.disableDifferentialDownload;
+        };
+        let differentialDownloadFailed = true;
+        if (canDifferentialDownload()) {
+          differentialDownloadFailed = await this.differentialDownloadInstaller(zipFileInfo, downloadUpdateOptions, destinationFile, provider, CURRENT_MAC_APP_ZIP_FILE_NAME);
         }
-        return `http://127.0.0.1:${address === null || address === void 0 ? void 0 : address.port}`;
-      };
-      return await new Promise((resolve, reject) => {
-        const pass = (0, crypto_12.randomBytes)(64).toString("base64").replace(/\//g, "_").replace(/\+/g, "-");
-        const authInfo = Buffer.from(`autoupdater:${pass}`, "ascii");
-        const fileUrl = `/${(0, crypto_12.randomBytes)(64).toString("hex")}.zip`;
-        this.server.on("request", (request, response) => {
-          const requestUrl = request.url;
-          log.info(`${requestUrl} requested`);
-          if (requestUrl === "/") {
-            if (!request.headers.authorization || request.headers.authorization.indexOf("Basic ") === -1) {
-              response.statusCode = 401;
-              response.statusMessage = "Invalid Authentication Credentials";
-              response.end();
-              log.warn("No authenthication info");
-              return;
-            }
-            const base64Credentials = request.headers.authorization.split(" ")[1];
-            const credentials = Buffer.from(base64Credentials, "base64").toString("ascii");
-            const [username, password] = credentials.split(":");
-            if (username !== "autoupdater" || password !== pass) {
-              response.statusCode = 401;
-              response.statusMessage = "Invalid Authentication Credentials";
-              response.end();
-              log.warn("Invalid authenthication credentials");
-              return;
-            }
-            const data = Buffer.from(`{ "url": "${getServerUrl(this.server)}${fileUrl}" }`);
-            response.writeHead(200, { "Content-Type": "application/json", "Content-Length": data.length });
-            response.end(data);
-            return;
+        if (differentialDownloadFailed) {
+          await this.httpExecutor.download(zipFileInfo.url, destinationFile, downloadOptions);
+        }
+      },
+      done: async (event) => {
+        if (!downloadUpdateOptions.disableDifferentialDownload) {
+          try {
+            const cachedUpdateFilePath = path$2.join(this.downloadedUpdateHelper.cacheDir, CURRENT_MAC_APP_ZIP_FILE_NAME);
+            await (0, fs_extra_1$1.copyFile)(event.downloadedFile, cachedUpdateFilePath);
+          } catch (error2) {
+            this._logger.warn(`Unable to copy file for caching for future differential downloads: ${error2.message}`);
           }
-          if (!requestUrl.startsWith(fileUrl)) {
-            log.warn(`${requestUrl} requested, but not supported`);
-            response.writeHead(404);
+        }
+        return this.updateDownloaded(zipFileInfo, event);
+      }
+    });
+  }
+  async updateDownloaded(zipFileInfo, event) {
+    var _a;
+    const downloadedFile = event.downloadedFile;
+    const updateFileSize = (_a = zipFileInfo.info.size) !== null && _a !== void 0 ? _a : (await (0, fs_extra_1$1.stat)(downloadedFile)).size;
+    const log = this._logger;
+    const logContext = `fileToProxy=${zipFileInfo.url.href}`;
+    this.closeServerIfExists();
+    this.debug(`Creating proxy server for native Squirrel.Mac (${logContext})`);
+    this.server = (0, http_1.createServer)();
+    this.debug(`Proxy server for native Squirrel.Mac is created (${logContext})`);
+    this.server.on("close", () => {
+      log.info(`Proxy server for native Squirrel.Mac is closed (${logContext})`);
+    });
+    const getServerUrl = (s) => {
+      const address = s.address();
+      if (typeof address === "string") {
+        return address;
+      }
+      return `http://127.0.0.1:${address === null || address === void 0 ? void 0 : address.port}`;
+    };
+    return await new Promise((resolve, reject) => {
+      const pass = (0, crypto_1.randomBytes)(64).toString("base64").replace(/\//g, "_").replace(/\+/g, "-");
+      const authInfo = Buffer.from(`autoupdater:${pass}`, "ascii");
+      const fileUrl = `/${(0, crypto_1.randomBytes)(64).toString("hex")}.zip`;
+      this.server.on("request", (request, response) => {
+        const requestUrl = request.url;
+        log.info(`${requestUrl} requested`);
+        if (requestUrl === "/") {
+          if (!request.headers.authorization || request.headers.authorization.indexOf("Basic ") === -1) {
+            response.statusCode = 401;
+            response.statusMessage = "Invalid Authentication Credentials";
             response.end();
+            log.warn("No authenthication info");
             return;
           }
-          log.info(`${fileUrl} requested by Squirrel.Mac, pipe ${downloadedFile}`);
-          let errorOccurred = false;
-          response.on("finish", () => {
-            if (!errorOccurred) {
-              this.nativeUpdater.removeListener("error", reject);
-              resolve([]);
-            }
-          });
-          const readStream = (0, fs_12.createReadStream)(downloadedFile);
-          readStream.on("error", (error2) => {
-            try {
-              response.end();
-            } catch (e) {
-              log.warn(`cannot end response: ${e}`);
-            }
-            errorOccurred = true;
+          const base64Credentials = request.headers.authorization.split(" ")[1];
+          const credentials = Buffer.from(base64Credentials, "base64").toString("ascii");
+          const [username, password] = credentials.split(":");
+          if (username !== "autoupdater" || password !== pass) {
+            response.statusCode = 401;
+            response.statusMessage = "Invalid Authentication Credentials";
+            response.end();
+            log.warn("Invalid authenthication credentials");
+            return;
+          }
+          const data = Buffer.from(`{ "url": "${getServerUrl(this.server)}${fileUrl}" }`);
+          response.writeHead(200, { "Content-Type": "application/json", "Content-Length": data.length });
+          response.end(data);
+          return;
+        }
+        if (!requestUrl.startsWith(fileUrl)) {
+          log.warn(`${requestUrl} requested, but not supported`);
+          response.writeHead(404);
+          response.end();
+          return;
+        }
+        log.info(`${fileUrl} requested by Squirrel.Mac, pipe ${downloadedFile}`);
+        let errorOccurred = false;
+        response.on("finish", () => {
+          if (!errorOccurred) {
             this.nativeUpdater.removeListener("error", reject);
-            reject(new Error(`Cannot pipe "${downloadedFile}": ${error2}`));
-          });
-          response.writeHead(200, {
-            "Content-Type": "application/zip",
-            "Content-Length": updateFileSize
-          });
-          readStream.pipe(response);
-        });
-        this.debug(`Proxy server for native Squirrel.Mac is starting to listen (${logContext})`);
-        this.server.listen(0, "127.0.0.1", () => {
-          this.debug(`Proxy server for native Squirrel.Mac is listening (address=${getServerUrl(this.server)}, ${logContext})`);
-          this.nativeUpdater.setFeedURL({
-            url: getServerUrl(this.server),
-            headers: {
-              "Cache-Control": "no-cache",
-              Authorization: `Basic ${authInfo.toString("base64")}`
-            }
-          });
-          this.dispatchUpdateDownloaded(event);
-          if (this.autoInstallOnAppQuit) {
-            this.nativeUpdater.once("error", reject);
-            this.nativeUpdater.checkForUpdates();
-          } else {
             resolve([]);
           }
         });
-      });
-    }
-    quitAndInstall() {
-      if (this.squirrelDownloadedUpdate) {
-        this.nativeUpdater.quitAndInstall();
-        this.closeServerIfExists();
-      } else {
-        this.nativeUpdater.on("update-downloaded", () => {
-          this.nativeUpdater.quitAndInstall();
-          this.closeServerIfExists();
+        const readStream = (0, fs_1.createReadStream)(downloadedFile);
+        readStream.on("error", (error2) => {
+          try {
+            response.end();
+          } catch (e) {
+            log.warn(`cannot end response: ${e}`);
+          }
+          errorOccurred = true;
+          this.nativeUpdater.removeListener("error", reject);
+          reject(new Error(`Cannot pipe "${downloadedFile}": ${error2}`));
         });
-        if (!this.autoInstallOnAppQuit) {
+        response.writeHead(200, {
+          "Content-Type": "application/zip",
+          "Content-Length": updateFileSize
+        });
+        readStream.pipe(response);
+      });
+      this.debug(`Proxy server for native Squirrel.Mac is starting to listen (${logContext})`);
+      this.server.listen(0, "127.0.0.1", () => {
+        this.debug(`Proxy server for native Squirrel.Mac is listening (address=${getServerUrl(this.server)}, ${logContext})`);
+        this.nativeUpdater.setFeedURL({
+          url: getServerUrl(this.server),
+          headers: {
+            "Cache-Control": "no-cache",
+            Authorization: `Basic ${authInfo.toString("base64")}`
+          }
+        });
+        this.dispatchUpdateDownloaded(event);
+        if (this.autoInstallOnAppQuit) {
+          this.nativeUpdater.once("error", reject);
           this.nativeUpdater.checkForUpdates();
+        } else {
+          resolve([]);
         }
+      });
+    });
+  }
+  handleUpdateDownloaded() {
+    if (this.autoRunAppAfterInstall) {
+      this.nativeUpdater.quitAndInstall();
+    } else {
+      this.app.quit();
+    }
+    this.closeServerIfExists();
+  }
+  quitAndInstall() {
+    if (this.squirrelDownloadedUpdate) {
+      this.handleUpdateDownloaded();
+    } else {
+      this.nativeUpdater.on("update-downloaded", () => this.handleUpdateDownloaded());
+      if (!this.autoInstallOnAppQuit) {
+        this.nativeUpdater.checkForUpdates();
       }
     }
-  };
-  MacUpdater.MacUpdater = MacUpdater$1;
-  return MacUpdater;
+  }
 }
-var NsisUpdater = {};
+MacUpdater$1.MacUpdater = MacUpdater;
+var NsisUpdater$1 = {};
 var windowsExecutableCodeSignatureVerifier = {};
 Object.defineProperty(windowsExecutableCodeSignatureVerifier, "__esModule", { value: true });
 windowsExecutableCodeSignatureVerifier.verifySignature = verifySignature;
-const builder_util_runtime_1 = out;
-const child_process_1 = require$$1$6;
+const builder_util_runtime_1$1 = out;
+const child_process_1 = require$$1$5;
 const os = require$$2;
-const path = require$$1$4;
+const path$1 = require$$1$1;
 function verifySignature(publisherNames, unescapedTempUpdateFile, logger) {
   return new Promise((resolve, reject) => {
     const tempUpdateFile = unescapedTempUpdateFile.replace(/'/g, "''");
@@ -13310,8 +13436,8 @@ function verifySignature(publisherNames, unescapedTempUpdateFile, logger) {
         const data = parseOut(stdout);
         if (data.Status === 0) {
           try {
-            const normlaizedUpdateFilePath = path.normalize(data.Path);
-            const normalizedTempUpdateFile = path.normalize(unescapedTempUpdateFile);
+            const normlaizedUpdateFilePath = path$1.normalize(data.Path);
+            const normalizedTempUpdateFile = path$1.normalize(unescapedTempUpdateFile);
             logger.info(`LiteralPath: ${normlaizedUpdateFilePath}. Update Path: ${normalizedTempUpdateFile}`);
             if (normlaizedUpdateFilePath !== normalizedTempUpdateFile) {
               handleError(logger, new Error(`LiteralPath of ${normlaizedUpdateFilePath} is different than ${normalizedTempUpdateFile}`), stderr, reject);
@@ -13321,10 +13447,10 @@ function verifySignature(publisherNames, unescapedTempUpdateFile, logger) {
           } catch (error3) {
             logger.warn(`Unable to verify LiteralPath of update asset due to missing data.Path. Skipping this step of validation. Message: ${(_a = error3.message) !== null && _a !== void 0 ? _a : error3.stack}`);
           }
-          const subject = (0, builder_util_runtime_1.parseDn)(data.SignerCertificate.Subject);
+          const subject = (0, builder_util_runtime_1$1.parseDn)(data.SignerCertificate.Subject);
           let match = false;
           for (const name of publisherNames) {
-            const dn = (0, builder_util_runtime_1.parseDn)(name);
+            const dn = (0, builder_util_runtime_1$1.parseDn)(name);
             if (dn.size) {
               const allKeys = Array.from(dn.keys());
               match = allKeys.every((key) => {
@@ -13388,283 +13514,267 @@ function isOldWin6() {
   const winVersion = os.release();
   return winVersion.startsWith("6.") && !winVersion.startsWith("6.3");
 }
-var hasRequiredNsisUpdater;
-function requireNsisUpdater() {
-  if (hasRequiredNsisUpdater) return NsisUpdater;
-  hasRequiredNsisUpdater = 1;
-  Object.defineProperty(NsisUpdater, "__esModule", { value: true });
-  NsisUpdater.NsisUpdater = void 0;
-  const builder_util_runtime_12 = out;
-  const path2 = require$$1$4;
-  const BaseUpdater_1 = requireBaseUpdater();
-  const FileWithEmbeddedBlockMapDifferentialDownloader_1 = FileWithEmbeddedBlockMapDifferentialDownloader$1;
-  const main_1 = requireMain();
-  const Provider_12 = Provider$1;
-  const fs_extra_12 = lib;
-  const windowsExecutableCodeSignatureVerifier_1 = windowsExecutableCodeSignatureVerifier;
-  const url_12 = require$$4;
-  let NsisUpdater$1 = class NsisUpdater extends BaseUpdater_1.BaseUpdater {
-    constructor(options, app2) {
-      super(options, app2);
-      this._verifyUpdateCodeSignature = (publisherNames, unescapedTempUpdateFile) => (0, windowsExecutableCodeSignatureVerifier_1.verifySignature)(publisherNames, unescapedTempUpdateFile, this._logger);
+Object.defineProperty(NsisUpdater$1, "__esModule", { value: true });
+NsisUpdater$1.NsisUpdater = void 0;
+const builder_util_runtime_1 = out;
+const path = require$$1$1;
+const BaseUpdater_1 = BaseUpdater$1;
+const FileWithEmbeddedBlockMapDifferentialDownloader_1 = FileWithEmbeddedBlockMapDifferentialDownloader$1;
+const types_1 = types;
+const Provider_1 = Provider$1;
+const fs_extra_1 = lib;
+const windowsExecutableCodeSignatureVerifier_1 = windowsExecutableCodeSignatureVerifier;
+const url_1 = require$$4$1;
+class NsisUpdater extends BaseUpdater_1.BaseUpdater {
+  constructor(options, app2) {
+    super(options, app2);
+    this._verifyUpdateCodeSignature = (publisherNames, unescapedTempUpdateFile) => (0, windowsExecutableCodeSignatureVerifier_1.verifySignature)(publisherNames, unescapedTempUpdateFile, this._logger);
+  }
+  /**
+   * The verifyUpdateCodeSignature. You can pass [win-verify-signature](https://github.com/beyondkmp/win-verify-trust) or another custom verify function: ` (publisherName: string[], path: string) => Promise<string | null>`.
+   * The default verify function uses [windowsExecutableCodeSignatureVerifier](https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/windowsExecutableCodeSignatureVerifier.ts)
+   */
+  get verifyUpdateCodeSignature() {
+    return this._verifyUpdateCodeSignature;
+  }
+  set verifyUpdateCodeSignature(value) {
+    if (value) {
+      this._verifyUpdateCodeSignature = value;
     }
-    /**
-     * The verifyUpdateCodeSignature. You can pass [win-verify-signature](https://github.com/beyondkmp/win-verify-trust) or another custom verify function: ` (publisherName: string[], path: string) => Promise<string | null>`.
-     * The default verify function uses [windowsExecutableCodeSignatureVerifier](https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/windowsExecutableCodeSignatureVerifier.ts)
-     */
-    get verifyUpdateCodeSignature() {
-      return this._verifyUpdateCodeSignature;
-    }
-    set verifyUpdateCodeSignature(value) {
-      if (value) {
-        this._verifyUpdateCodeSignature = value;
-      }
-    }
-    /*** @private */
-    doDownloadUpdate(downloadUpdateOptions) {
-      const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
-      const fileInfo = (0, Provider_12.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "exe");
-      return this.executeDownload({
-        fileExtension: "exe",
-        downloadUpdateOptions,
-        fileInfo,
-        task: async (destinationFile, downloadOptions, packageFile, removeTempDirIfAny) => {
-          const packageInfo = fileInfo.packageInfo;
-          const isWebInstaller = packageInfo != null && packageFile != null;
-          if (isWebInstaller && downloadUpdateOptions.disableWebInstaller) {
-            throw (0, builder_util_runtime_12.newError)(`Unable to download new version ${downloadUpdateOptions.updateInfoAndProvider.info.version}. Web Installers are disabled`, "ERR_UPDATER_WEB_INSTALLER_DISABLED");
-          }
-          if (!isWebInstaller && !downloadUpdateOptions.disableWebInstaller) {
-            this._logger.warn("disableWebInstaller is set to false, you should set it to true if you do not plan on using a web installer. This will default to true in a future version.");
-          }
-          if (isWebInstaller || downloadUpdateOptions.disableDifferentialDownload || await this.differentialDownloadInstaller(fileInfo, downloadUpdateOptions, destinationFile, provider, builder_util_runtime_12.CURRENT_APP_INSTALLER_FILE_NAME)) {
-            await this.httpExecutor.download(fileInfo.url, destinationFile, downloadOptions);
-          }
-          const signatureVerificationStatus = await this.verifySignature(destinationFile);
-          if (signatureVerificationStatus != null) {
-            await removeTempDirIfAny();
-            throw (0, builder_util_runtime_12.newError)(`New version ${downloadUpdateOptions.updateInfoAndProvider.info.version} is not signed by the application owner: ${signatureVerificationStatus}`, "ERR_UPDATER_INVALID_SIGNATURE");
-          }
-          if (isWebInstaller) {
-            if (await this.differentialDownloadWebPackage(downloadUpdateOptions, packageInfo, packageFile, provider)) {
+  }
+  /*** @private */
+  doDownloadUpdate(downloadUpdateOptions) {
+    const provider = downloadUpdateOptions.updateInfoAndProvider.provider;
+    const fileInfo = (0, Provider_1.findFile)(provider.resolveFiles(downloadUpdateOptions.updateInfoAndProvider.info), "exe");
+    return this.executeDownload({
+      fileExtension: "exe",
+      downloadUpdateOptions,
+      fileInfo,
+      task: async (destinationFile, downloadOptions, packageFile, removeTempDirIfAny) => {
+        const packageInfo = fileInfo.packageInfo;
+        const isWebInstaller = packageInfo != null && packageFile != null;
+        if (isWebInstaller && downloadUpdateOptions.disableWebInstaller) {
+          throw (0, builder_util_runtime_1.newError)(`Unable to download new version ${downloadUpdateOptions.updateInfoAndProvider.info.version}. Web Installers are disabled`, "ERR_UPDATER_WEB_INSTALLER_DISABLED");
+        }
+        if (!isWebInstaller && !downloadUpdateOptions.disableWebInstaller) {
+          this._logger.warn("disableWebInstaller is set to false, you should set it to true if you do not plan on using a web installer. This will default to true in a future version.");
+        }
+        if (isWebInstaller || downloadUpdateOptions.disableDifferentialDownload || await this.differentialDownloadInstaller(fileInfo, downloadUpdateOptions, destinationFile, provider, builder_util_runtime_1.CURRENT_APP_INSTALLER_FILE_NAME)) {
+          await this.httpExecutor.download(fileInfo.url, destinationFile, downloadOptions);
+        }
+        const signatureVerificationStatus = await this.verifySignature(destinationFile);
+        if (signatureVerificationStatus != null) {
+          await removeTempDirIfAny();
+          throw (0, builder_util_runtime_1.newError)(`New version ${downloadUpdateOptions.updateInfoAndProvider.info.version} is not signed by the application owner: ${signatureVerificationStatus}`, "ERR_UPDATER_INVALID_SIGNATURE");
+        }
+        if (isWebInstaller) {
+          if (await this.differentialDownloadWebPackage(downloadUpdateOptions, packageInfo, packageFile, provider)) {
+            try {
+              await this.httpExecutor.download(new url_1.URL(packageInfo.path), packageFile, {
+                headers: downloadUpdateOptions.requestHeaders,
+                cancellationToken: downloadUpdateOptions.cancellationToken,
+                sha512: packageInfo.sha512
+              });
+            } catch (e) {
               try {
-                await this.httpExecutor.download(new url_12.URL(packageInfo.path), packageFile, {
-                  headers: downloadUpdateOptions.requestHeaders,
-                  cancellationToken: downloadUpdateOptions.cancellationToken,
-                  sha512: packageInfo.sha512
-                });
-              } catch (e) {
-                try {
-                  await (0, fs_extra_12.unlink)(packageFile);
-                } catch (_ignored) {
-                }
-                throw e;
+                await (0, fs_extra_1.unlink)(packageFile);
+              } catch (_ignored) {
               }
+              throw e;
             }
           }
         }
-      });
-    }
-    // $certificateInfo = (Get-AuthenticodeSignature 'xxx\yyy.exe'
-    // | where {$_.Status.Equals([System.Management.Automation.SignatureStatus]::Valid) -and $_.SignerCertificate.Subject.Contains("CN=siemens.com")})
-    // | Out-String ; if ($certificateInfo) { exit 0 } else { exit 1 }
-    async verifySignature(tempUpdateFile) {
-      let publisherName;
-      try {
-        publisherName = (await this.configOnDisk.value).publisherName;
-        if (publisherName == null) {
-          return null;
-        }
-      } catch (e) {
-        if (e.code === "ENOENT") {
-          return null;
-        }
-        throw e;
-      }
-      return await this._verifyUpdateCodeSignature(Array.isArray(publisherName) ? publisherName : [publisherName], tempUpdateFile);
-    }
-    doInstall(options) {
-      const args = ["--updated"];
-      if (options.isSilent) {
-        args.push("/S");
-      }
-      if (options.isForceRunAfter) {
-        args.push("--force-run");
-      }
-      if (this.installDirectory) {
-        args.push(`/D=${this.installDirectory}`);
-      }
-      const packagePath = this.downloadedUpdateHelper == null ? null : this.downloadedUpdateHelper.packageFile;
-      if (packagePath != null) {
-        args.push(`--package-file=${packagePath}`);
-      }
-      const callUsingElevation = () => {
-        this.spawnLog(path2.join(process.resourcesPath, "elevate.exe"), [options.installerPath].concat(args)).catch((e) => this.dispatchError(e));
-      };
-      if (options.isAdminRightsRequired) {
-        this._logger.info("isAdminRightsRequired is set to true, run installer using elevate.exe");
-        callUsingElevation();
-        return true;
-      }
-      this.spawnLog(options.installerPath, args).catch((e) => {
-        const errorCode = e.code;
-        this._logger.info(`Cannot run installer: error code: ${errorCode}, error message: "${e.message}", will be executed again using elevate if EACCES, and will try to use electron.shell.openItem if ENOENT`);
-        if (errorCode === "UNKNOWN" || errorCode === "EACCES") {
-          callUsingElevation();
-        } else if (errorCode === "ENOENT") {
-          require$$1$5.shell.openPath(options.installerPath).catch((err) => this.dispatchError(err));
-        } else {
-          this.dispatchError(e);
-        }
-      });
-      return true;
-    }
-    async differentialDownloadWebPackage(downloadUpdateOptions, packageInfo, packagePath, provider) {
-      if (packageInfo.blockMapSize == null) {
-        return true;
-      }
-      try {
-        const downloadOptions = {
-          newUrl: new url_12.URL(packageInfo.path),
-          oldFile: path2.join(this.downloadedUpdateHelper.cacheDir, builder_util_runtime_12.CURRENT_APP_PACKAGE_FILE_NAME),
-          logger: this._logger,
-          newFile: packagePath,
-          requestHeaders: this.requestHeaders,
-          isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
-          cancellationToken: downloadUpdateOptions.cancellationToken
-        };
-        if (this.listenerCount(main_1.DOWNLOAD_PROGRESS) > 0) {
-          downloadOptions.onProgress = (it) => this.emit(main_1.DOWNLOAD_PROGRESS, it);
-        }
-        await new FileWithEmbeddedBlockMapDifferentialDownloader_1.FileWithEmbeddedBlockMapDifferentialDownloader(packageInfo, this.httpExecutor, downloadOptions).download();
-      } catch (e) {
-        this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
-        return process.platform === "win32";
-      }
-      return false;
-    }
-  };
-  NsisUpdater.NsisUpdater = NsisUpdater$1;
-  return NsisUpdater;
-}
-var hasRequiredMain;
-function requireMain() {
-  if (hasRequiredMain) return main$1;
-  hasRequiredMain = 1;
-  (function(exports) {
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.UpdaterSignal = exports.UPDATE_DOWNLOADED = exports.DOWNLOAD_PROGRESS = exports.NsisUpdater = exports.MacUpdater = exports.RpmUpdater = exports.DebUpdater = exports.AppImageUpdater = exports.Provider = exports.CancellationToken = exports.NoOpLogger = exports.AppUpdater = exports.BaseUpdater = void 0;
-    const builder_util_runtime_12 = out;
-    Object.defineProperty(exports, "CancellationToken", { enumerable: true, get: function() {
-      return builder_util_runtime_12.CancellationToken;
-    } });
-    const fs_extra_12 = lib;
-    const path2 = require$$1$4;
-    var BaseUpdater_1 = requireBaseUpdater();
-    Object.defineProperty(exports, "BaseUpdater", { enumerable: true, get: function() {
-      return BaseUpdater_1.BaseUpdater;
-    } });
-    var AppUpdater_1 = requireAppUpdater();
-    Object.defineProperty(exports, "AppUpdater", { enumerable: true, get: function() {
-      return AppUpdater_1.AppUpdater;
-    } });
-    Object.defineProperty(exports, "NoOpLogger", { enumerable: true, get: function() {
-      return AppUpdater_1.NoOpLogger;
-    } });
-    var Provider_12 = Provider$1;
-    Object.defineProperty(exports, "Provider", { enumerable: true, get: function() {
-      return Provider_12.Provider;
-    } });
-    var AppImageUpdater_1 = requireAppImageUpdater();
-    Object.defineProperty(exports, "AppImageUpdater", { enumerable: true, get: function() {
-      return AppImageUpdater_1.AppImageUpdater;
-    } });
-    var DebUpdater_1 = requireDebUpdater();
-    Object.defineProperty(exports, "DebUpdater", { enumerable: true, get: function() {
-      return DebUpdater_1.DebUpdater;
-    } });
-    var RpmUpdater_1 = requireRpmUpdater();
-    Object.defineProperty(exports, "RpmUpdater", { enumerable: true, get: function() {
-      return RpmUpdater_1.RpmUpdater;
-    } });
-    var MacUpdater_1 = requireMacUpdater();
-    Object.defineProperty(exports, "MacUpdater", { enumerable: true, get: function() {
-      return MacUpdater_1.MacUpdater;
-    } });
-    var NsisUpdater_1 = requireNsisUpdater();
-    Object.defineProperty(exports, "NsisUpdater", { enumerable: true, get: function() {
-      return NsisUpdater_1.NsisUpdater;
-    } });
-    let _autoUpdater;
-    function doLoadAutoUpdater() {
-      if (process.platform === "win32") {
-        _autoUpdater = new (requireNsisUpdater()).NsisUpdater();
-      } else if (process.platform === "darwin") {
-        _autoUpdater = new (requireMacUpdater()).MacUpdater();
-      } else {
-        _autoUpdater = new (requireAppImageUpdater()).AppImageUpdater();
-        try {
-          const identity = path2.join(process.resourcesPath, "package-type");
-          if (!(0, fs_extra_12.existsSync)(identity)) {
-            return _autoUpdater;
-          }
-          console.info("Checking for beta autoupdate feature for deb/rpm distributions");
-          const fileType = (0, fs_extra_12.readFileSync)(identity).toString().trim();
-          console.info("Found package-type:", fileType);
-          switch (fileType) {
-            case "deb":
-              _autoUpdater = new (requireDebUpdater()).DebUpdater();
-              break;
-            case "rpm":
-              _autoUpdater = new (requireRpmUpdater()).RpmUpdater();
-              break;
-            default:
-              break;
-          }
-        } catch (error2) {
-          console.warn("Unable to detect 'package-type' for autoUpdater (beta rpm/deb support). If you'd like to expand support, please consider contributing to electron-builder", error2.message);
-        }
-      }
-      return _autoUpdater;
-    }
-    Object.defineProperty(exports, "autoUpdater", {
-      enumerable: true,
-      get: () => {
-        return _autoUpdater || doLoadAutoUpdater();
       }
     });
-    exports.DOWNLOAD_PROGRESS = "download-progress";
-    exports.UPDATE_DOWNLOADED = "update-downloaded";
-    class UpdaterSignal {
-      constructor(emitter) {
-        this.emitter = emitter;
+  }
+  // $certificateInfo = (Get-AuthenticodeSignature 'xxx\yyy.exe'
+  // | where {$_.Status.Equals([System.Management.Automation.SignatureStatus]::Valid) -and $_.SignerCertificate.Subject.Contains("CN=siemens.com")})
+  // | Out-String ; if ($certificateInfo) { exit 0 } else { exit 1 }
+  async verifySignature(tempUpdateFile) {
+    let publisherName;
+    try {
+      publisherName = (await this.configOnDisk.value).publisherName;
+      if (publisherName == null) {
+        return null;
       }
-      /**
-       * Emitted when an authenticating proxy is [asking for user credentials](https://github.com/electron/electron/blob/master/docs/api/client-request.md#event-login).
-       */
-      login(handler) {
-        addHandler(this.emitter, "login", handler);
+    } catch (e) {
+      if (e.code === "ENOENT") {
+        return null;
       }
-      progress(handler) {
-        addHandler(this.emitter, exports.DOWNLOAD_PROGRESS, handler);
-      }
-      updateDownloaded(handler) {
-        addHandler(this.emitter, exports.UPDATE_DOWNLOADED, handler);
-      }
-      updateCancelled(handler) {
-        addHandler(this.emitter, "update-cancelled", handler);
-      }
+      throw e;
     }
-    exports.UpdaterSignal = UpdaterSignal;
-    function addHandler(emitter, event, handler) {
-      {
-        emitter.on(event, handler);
-      }
+    return await this._verifyUpdateCodeSignature(Array.isArray(publisherName) ? publisherName : [publisherName], tempUpdateFile);
+  }
+  doInstall(options) {
+    const installerPath = this.installerPath;
+    if (installerPath == null) {
+      this.dispatchError(new Error("No valid update available, can't quit and install"));
+      return false;
     }
-  })(main$1);
-  return main$1;
+    const args = ["--updated"];
+    if (options.isSilent) {
+      args.push("/S");
+    }
+    if (options.isForceRunAfter) {
+      args.push("--force-run");
+    }
+    if (this.installDirectory) {
+      args.push(`/D=${this.installDirectory}`);
+    }
+    const packagePath = this.downloadedUpdateHelper == null ? null : this.downloadedUpdateHelper.packageFile;
+    if (packagePath != null) {
+      args.push(`--package-file=${packagePath}`);
+    }
+    const callUsingElevation = () => {
+      this.spawnLog(path.join(process.resourcesPath, "elevate.exe"), [installerPath].concat(args)).catch((e) => this.dispatchError(e));
+    };
+    if (options.isAdminRightsRequired) {
+      this._logger.info("isAdminRightsRequired is set to true, run installer using elevate.exe");
+      callUsingElevation();
+      return true;
+    }
+    this.spawnLog(installerPath, args).catch((e) => {
+      const errorCode = e.code;
+      this._logger.info(`Cannot run installer: error code: ${errorCode}, error message: "${e.message}", will be executed again using elevate if EACCES, and will try to use electron.shell.openItem if ENOENT`);
+      if (errorCode === "UNKNOWN" || errorCode === "EACCES") {
+        callUsingElevation();
+      } else if (errorCode === "ENOENT") {
+        require$$1$4.shell.openPath(installerPath).catch((err) => this.dispatchError(err));
+      } else {
+        this.dispatchError(e);
+      }
+    });
+    return true;
+  }
+  async differentialDownloadWebPackage(downloadUpdateOptions, packageInfo, packagePath, provider) {
+    if (packageInfo.blockMapSize == null) {
+      return true;
+    }
+    try {
+      const downloadOptions = {
+        newUrl: new url_1.URL(packageInfo.path),
+        oldFile: path.join(this.downloadedUpdateHelper.cacheDir, builder_util_runtime_1.CURRENT_APP_PACKAGE_FILE_NAME),
+        logger: this._logger,
+        newFile: packagePath,
+        requestHeaders: this.requestHeaders,
+        isUseMultipleRangeRequest: provider.isUseMultipleRangeRequest,
+        cancellationToken: downloadUpdateOptions.cancellationToken
+      };
+      if (this.listenerCount(types_1.DOWNLOAD_PROGRESS) > 0) {
+        downloadOptions.onProgress = (it) => this.emit(types_1.DOWNLOAD_PROGRESS, it);
+      }
+      await new FileWithEmbeddedBlockMapDifferentialDownloader_1.FileWithEmbeddedBlockMapDifferentialDownloader(packageInfo, this.httpExecutor, downloadOptions).download();
+    } catch (e) {
+      this._logger.error(`Cannot download differentially, fallback to full download: ${e.stack || e}`);
+      return process.platform === "win32";
+    }
+    return false;
+  }
 }
-var mainExports = requireMain();
+NsisUpdater$1.NsisUpdater = NsisUpdater;
+(function(exports) {
+  var __createBinding = commonjsGlobal && commonjsGlobal.__createBinding || (Object.create ? function(o, m, k, k2) {
+    if (k2 === void 0) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() {
+        return m[k];
+      } };
+    }
+    Object.defineProperty(o, k2, desc);
+  } : function(o, m, k, k2) {
+    if (k2 === void 0) k2 = k;
+    o[k2] = m[k];
+  });
+  var __exportStar = commonjsGlobal && commonjsGlobal.__exportStar || function(m, exports2) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.NsisUpdater = exports.MacUpdater = exports.RpmUpdater = exports.PacmanUpdater = exports.DebUpdater = exports.AppImageUpdater = exports.Provider = exports.NoOpLogger = exports.AppUpdater = exports.BaseUpdater = void 0;
+  const fs_extra_12 = lib;
+  const path2 = require$$1$1;
+  var BaseUpdater_12 = BaseUpdater$1;
+  Object.defineProperty(exports, "BaseUpdater", { enumerable: true, get: function() {
+    return BaseUpdater_12.BaseUpdater;
+  } });
+  var AppUpdater_12 = AppUpdater$1;
+  Object.defineProperty(exports, "AppUpdater", { enumerable: true, get: function() {
+    return AppUpdater_12.AppUpdater;
+  } });
+  Object.defineProperty(exports, "NoOpLogger", { enumerable: true, get: function() {
+    return AppUpdater_12.NoOpLogger;
+  } });
+  var Provider_12 = Provider$1;
+  Object.defineProperty(exports, "Provider", { enumerable: true, get: function() {
+    return Provider_12.Provider;
+  } });
+  var AppImageUpdater_1 = AppImageUpdater$1;
+  Object.defineProperty(exports, "AppImageUpdater", { enumerable: true, get: function() {
+    return AppImageUpdater_1.AppImageUpdater;
+  } });
+  var DebUpdater_1 = DebUpdater$1;
+  Object.defineProperty(exports, "DebUpdater", { enumerable: true, get: function() {
+    return DebUpdater_1.DebUpdater;
+  } });
+  var PacmanUpdater_1 = PacmanUpdater$1;
+  Object.defineProperty(exports, "PacmanUpdater", { enumerable: true, get: function() {
+    return PacmanUpdater_1.PacmanUpdater;
+  } });
+  var RpmUpdater_1 = RpmUpdater$1;
+  Object.defineProperty(exports, "RpmUpdater", { enumerable: true, get: function() {
+    return RpmUpdater_1.RpmUpdater;
+  } });
+  var MacUpdater_1 = MacUpdater$1;
+  Object.defineProperty(exports, "MacUpdater", { enumerable: true, get: function() {
+    return MacUpdater_1.MacUpdater;
+  } });
+  var NsisUpdater_1 = NsisUpdater$1;
+  Object.defineProperty(exports, "NsisUpdater", { enumerable: true, get: function() {
+    return NsisUpdater_1.NsisUpdater;
+  } });
+  __exportStar(types, exports);
+  let _autoUpdater;
+  function doLoadAutoUpdater() {
+    if (process.platform === "win32") {
+      _autoUpdater = new NsisUpdater$1.NsisUpdater();
+    } else if (process.platform === "darwin") {
+      _autoUpdater = new MacUpdater$1.MacUpdater();
+    } else {
+      _autoUpdater = new AppImageUpdater$1.AppImageUpdater();
+      try {
+        const identity = path2.join(process.resourcesPath, "package-type");
+        if (!(0, fs_extra_12.existsSync)(identity)) {
+          return _autoUpdater;
+        }
+        console.info("Checking for beta autoupdate feature for deb/rpm distributions");
+        const fileType = (0, fs_extra_12.readFileSync)(identity).toString().trim();
+        console.info("Found package-type:", fileType);
+        switch (fileType) {
+          case "deb":
+            _autoUpdater = new DebUpdater$1.DebUpdater();
+            break;
+          case "rpm":
+            _autoUpdater = new RpmUpdater$1.RpmUpdater();
+            break;
+          case "pacman":
+            _autoUpdater = new PacmanUpdater$1.PacmanUpdater();
+            break;
+          default:
+            break;
+        }
+      } catch (error2) {
+        console.warn("Unable to detect 'package-type' for autoUpdater (beta rpm/deb support). If you'd like to expand support, please consider contributing to electron-builder", error2.message);
+      }
+    }
+    return _autoUpdater;
+  }
+  Object.defineProperty(exports, "autoUpdater", {
+    enumerable: true,
+    get: () => {
+      return _autoUpdater || doLoadAutoUpdater();
+    }
+  });
+})(main$1);
 function refreshData(win2, msg = "") {
   win2 == null ? void 0 : win2.webContents.send("refresh-data", { msg });
 }
@@ -13688,53 +13798,53 @@ const Message = (mainWindow, type2, data) => {
   mainWindow.webContents.send("web-update-message", sendData);
 };
 const checkUpdate = (mainWindow, db2) => {
-  mainExports.autoUpdater.autoDownload = false;
-  mainExports.autoUpdater.setFeedURL("https://download.anixuil.top/webstartui/update/");
-  mainExports.autoUpdater.on("error", (err) => {
+  main$1.autoUpdater.autoDownload = false;
+  main$1.autoUpdater.setFeedURL("https://download.anixuil.top/webstartui/update/");
+  main$1.autoUpdater.on("error", (err) => {
     Message(mainWindow, 0, err.message);
-    mainExports.autoUpdater.removeAllListeners();
+    main$1.autoUpdater.removeAllListeners();
   });
-  mainExports.autoUpdater.on("checking-for-update", () => {
+  main$1.autoUpdater.on("checking-for-update", () => {
     Message(mainWindow, 1);
   });
-  mainExports.autoUpdater.on("update-not-available", () => {
+  main$1.autoUpdater.on("update-not-available", () => {
     Message(mainWindow, 5, "没有新版本");
-    mainExports.autoUpdater.removeAllListeners();
+    main$1.autoUpdater.removeAllListeners();
   });
-  mainExports.autoUpdater.on("update-available", () => {
+  main$1.autoUpdater.on("update-available", () => {
     Message(mainWindow, 2);
   });
-  mainExports.autoUpdater.on("update-downloaded", async () => {
+  main$1.autoUpdater.on("update-downloaded", async () => {
     Message(mainWindow, 3);
     const isFirstRunVal = await isFirstRun(db2);
     if (isFirstRunVal) {
-      mainExports.autoUpdater.quitAndInstall(true, true);
-      mainExports.autoUpdater.removeAllListeners();
+      main$1.autoUpdater.quitAndInstall(true, true);
+      main$1.autoUpdater.removeAllListeners();
     } else {
       window.ipcRenderer.invoke("restore-first-run").then(() => {
-        mainExports.autoUpdater.removeAllListeners();
+        main$1.autoUpdater.removeAllListeners();
       }).finally(() => {
-        mainExports.autoUpdater.quitAndInstall(true, true);
-        mainExports.autoUpdater.removeAllListeners();
+        main$1.autoUpdater.quitAndInstall(true, true);
+        main$1.autoUpdater.removeAllListeners();
       });
     }
   });
-  mainExports.autoUpdater.on("download-progress", (progress) => {
+  main$1.autoUpdater.on("download-progress", (progress) => {
     mainWindow.webContents.send("web-update-message", progress);
   });
-  mainExports.autoUpdater.checkForUpdates();
+  main$1.autoUpdater.checkForUpdates();
 };
 const update = (mainWindow) => {
-  mainExports.autoUpdater.downloadUpdate();
+  main$1.autoUpdater.downloadUpdate();
 };
 const require$1 = createRequire(import.meta.url);
 const sqlite3 = require$1("sqlite3");
-const __dirname = path$i.dirname(fileURLToPath(import.meta.url));
-process.env.APP_ROOT = path$i.join(__dirname, "..");
+const __dirname = path$m.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path$m.join(__dirname, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-const MAIN_DIST = path$i.join(process.env.APP_ROOT, "dist-electron");
-const RENDERER_DIST = path$i.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path$i.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+const MAIN_DIST = path$m.join(process.env.APP_ROOT, "dist-electron");
+const RENDERER_DIST = path$m.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path$m.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
 let win;
 const projectProcesses = /* @__PURE__ */ new Map();
 const logStreams = /* @__PURE__ */ new Map();
@@ -13842,11 +13952,11 @@ async function checkPortOccupied(port) {
 let tray = null;
 async function createWindow() {
   win = new BrowserWindow({
-    icon: path$i.join(process.env.VITE_PUBLIC, "favicon.ico"),
+    icon: path$m.join(process.env.VITE_PUBLIC, "favicon.ico"),
     // 关闭菜单
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path$i.join(__dirname, "preload.mjs")
+      preload: path$m.join(__dirname, "preload.mjs")
     },
     width: 1080,
     height: 720
@@ -13856,17 +13966,16 @@ async function createWindow() {
   });
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
-    mainExports.autoUpdater.forceDevUpdateConfig = true;
+    main$1.autoUpdater.forceDevUpdateConfig = true;
   } else {
-    win.loadFile(path$i.join(RENDERER_DIST, "index.html"));
+    win.loadFile(path$m.join(RENDERER_DIST, "index.html"));
   }
-  win.webContents.openDevTools();
   win.on("close", (e) => {
     e.preventDefault();
     win == null ? void 0 : win.setSkipTaskbar(true);
     win == null ? void 0 : win.hide();
   });
-  tray = new Tray(path$i.join(process.env.VITE_PUBLIC, "favicon.ico"));
+  tray = new Tray(path$m.join(process.env.VITE_PUBLIC, "favicon.ico"));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "打开主窗口",
@@ -13904,25 +14013,24 @@ async function createWindow() {
     if (isFirstRunVal) {
       const sysData = await queryData({
         table: "sys_table",
-        type: "query",
         data: {}
       });
       if (sysData.length > 1) {
         for (let i = 1; i < sysData.length; i++) {
-          await deleteData({ table: "sys_table", type: "delete", data: { sys_id: sysData[i].sysId } });
+          await deleteData({ table: "sys_table", data: { sys_id: sysData[i].sysId } });
         }
-        updateData({ table: "sys_table", type: "update", data: { sys_is_first_run: 0 }, condition: { sys_id: sysData[0].sysId } });
+        updateData({ table: "sys_table", data: { sys_is_first_run: 0 }, condition: { sys_id: sysData[0].sysId } });
       } else if (sysData.length === 1) {
-        updateData({ table: "sys_table", type: "update", data: { sys_is_first_run: 0 }, condition: { sys_id: sysData[0].sysId } });
+        updateData({ table: "sys_table", data: { sys_is_first_run: 0 }, condition: { sys_id: sysData[0].sysId } });
       } else if (sysData.length === 0) {
-        insertData({ table: "sys_table", type: "insert", data: { sys_is_first_run: 0 } });
+        insertData({ table: "sys_table", data: { sys_is_first_run: 0 } });
       }
     }
     return isFirstRunVal;
   });
   ipcMain.handle("auto-update-cancel", async () => {
     return new Promise(async (resolve, reject) => {
-      mainExports.autoUpdater.removeAllListeners();
+      main$1.autoUpdater.removeAllListeners();
       app.relaunch();
       app.exit();
       resolve(true);
@@ -13934,17 +14042,16 @@ async function createWindow() {
       if (isFirstRunVal) {
         const sysData = await queryData({
           table: "sys_table",
-          type: "query",
           data: {}
         });
         if (sysData.length > 1) {
           for (let i = 1; i < sysData.length; i++) {
-            await deleteData({ table: "sys_table", type: "delete", data: { sys_id: sysData[i].sys_id } });
+            await deleteData({ table: "sys_table", data: { sys_id: sysData[i].sys_id } });
           }
-          updateData({ table: "sys_table", type: "update", data: { sys_is_first_run: 1 }, condition: { sys_id: sysData[0].sys_id } });
+          updateData({ table: "sys_table", data: { sys_is_first_run: 1 }, condition: { sys_id: sysData[0].sys_id } });
           resolve(true);
         } else if (sysData.length === 1) {
-          updateData({ table: "sys_table", type: "update", data: { sys_is_first_run: 1 }, condition: { sys_id: sysData[0].sys_id } });
+          updateData({ table: "sys_table", data: { sys_is_first_run: 1 }, condition: { sys_id: sysData[0].sys_id } });
           resolve(true);
         } else {
           reject(false);
@@ -14174,11 +14281,11 @@ async function createWindow() {
       if (isOccupied) {
         throw new Error(`端口 ${projectPort} 已被占用，请更换端口`);
       }
-      const logDir = path$i.join(app.getPath("userData"), "logs");
+      const logDir = path$m.join(app.getPath("userData"), "logs");
       if (!fs$j.existsSync(logDir)) {
         fs$j.mkdirSync(logDir, { recursive: true });
       }
-      const logPath = path$i.join(logDir, `${projectName}.log`);
+      const logPath = path$m.join(logDir, `${projectName}.log`);
       console.log("日志文件目录", logPath);
       const logStream = createWriteStream(logPath, {
         flags: "w",
@@ -14283,8 +14390,8 @@ async function createWindow() {
   });
   ipcMain.handle("readProjectLog", async (event, params) => {
     const { projectName, lastPosition = 0 } = params;
-    const logDir = path$i.join(app.getPath("userData"), "logs");
-    const logPath = path$i.join(logDir, `${projectName}.log`);
+    const logDir = path$m.join(app.getPath("userData"), "logs");
+    const logPath = path$m.join(logDir, `${projectName}.log`);
     try {
       if (!fs$j.existsSync(logPath)) {
         return { content: "", position: 0 };
@@ -14319,7 +14426,7 @@ app.on("activate", () => {
   }
 });
 app.whenReady().then(createWindow);
-const dbPath = process.env.NODE_ENV === "development" ? path$i.join(__dirname, "webstartui.db") : path$i.join(app.getPath("userData"), "webstartui.db");
+const dbPath = process.env.NODE_ENV === "development" ? path$m.join(__dirname, "webstartui.db") : path$m.join(app.getPath("userData"), "webstartui.db");
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
   if (err) {
     console.error(err.message);

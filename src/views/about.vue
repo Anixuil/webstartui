@@ -9,7 +9,7 @@
     <div class="about-wrapper">
         <div class="glass-card">
             <div class="version-section">
-                <el-button @click="update" type="primary" class="update-btn">检查更新 当前版本 v1.0.2</el-button>
+                <el-button @click="update" type="primary" class="update-btn">检查更新 当前版本 v1.0.3</el-button>
                 <el-button @click="updateLog" text type="primary" class="log-btn">查看更新日志</el-button>
             </div>
             <div class="links-section">

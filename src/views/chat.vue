@@ -2,36 +2,28 @@
     <div class="views-common-wrapper chat-container">
         <!-- 聊天记录区域 -->
         <div class="chat-messages custom-scrollbar" ref="messageContainer">
-            <div v-for="(message, index) in chatMessages" 
-                 :key="index" 
-                 :class="['message', message.role]"
-                 :style="{ 
-                     animationDelay: `${index * 0.1}s`,
-                     opacity: message.tag === 'generating' ? 0.7 : 1
-                 }">
+            <div v-for="(message, index) in chatMessages" :key="index" :class="['message', message.role]" :style="{
+                animationDelay: `${index * 0.1}s`,
+                opacity: message.tag === 'generating' ? 0.7 : 1
+            }">
                 <div class="message-content">
                     <!-- 推理内容 -->
                     <div v-if="message.reasoning_content" class="reasoning-content">
                         <span>推理内容：</span>
                         <div :key="'user-' + messageKey"
-                            v-if="!['generated', 'default'].includes(message.tag as string)" 
+                            v-if="!['generated', 'default'].includes(message.tag as string)"
                             v-text="message.reasoning_content">
                         </div>
-                        <div :key="'assistant-' + messageKey" 
-                             v-else 
-                             v-html="message.reasoning_content"
-                             :class="{'typing-effect': message.tag === 'generating'}">
+                        <div :key="'assistant-' + messageKey" v-else v-html="message.reasoning_content"
+                            :class="{ 'typing-effect': message.tag === 'generating' }">
                         </div>
                     </div>
                     <!-- 主要内容 -->
-                    <div :key="'user-' + messageKey" 
-                         v-if="!['generated', 'default'].includes(message.tag as string)"
-                         v-text="message.content">
+                    <div :key="'user-' + messageKey" v-if="!['generated', 'default'].includes(message.tag as string)"
+                        v-text="message.content">
                     </div>
-                    <div :key="'assistant-' + messageKey" 
-                         v-else 
-                         v-html="message.content"
-                         :class="{'typing-effect': message.tag === 'generating'}">
+                    <div :key="'assistant-' + messageKey" v-else v-html="message.content"
+                        :class="{ 'typing-effect': message.tag === 'generating' }">
                     </div>
                 </div>
             </div>
@@ -39,31 +31,22 @@
 
         <!-- 输入区域 -->
         <div class="chat-input">
-            <el-input 
-                v-model="userInput" 
-                type="textarea" 
-                :rows="1" 
-                :autosize="{ minRows: 1, maxRows: 4 }" 
-                placeholder="请输入消息..."
-                @keyup.prevent.enter="sendMessage" 
-                :disabled="loading"
-                class="input-transition" 
-            />
+            <el-input v-model="userInput" type="textarea" :rows="1" :autosize="{ minRows: 1, maxRows: 4 }"
+                placeholder="请输入消息..." @keydown.ctrl.enter="sendMessage" :disabled="loading" class="input-transition" />
             <div class="button-group">
-                <el-button 
-                    type="primary" 
-                    @click="sendMessage" 
-                    :loading="loading"
-                    class="send-button">
-                    发送<span class="shortcut-hint">ctrl+enter</span>
-                </el-button>
-                <el-button 
-                    type="primary" 
-                    @click="clearChatHistory"
-                    :disabled="chatMessages.length < 2 || loading"
-                    class="clear-button">
-                    清空聊天记录
-                </el-button>
+                <el-select v-model="selectedScene" placeholder="选择场景" class="scene-selector">
+                    <el-option v-for="item in sceneOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+                <div class="right-buttons">
+                    <el-button type="primary" @click="clearChatHistory" :disabled="chatMessages.length < 2 || loading"
+                        class="clear-button" icon="Delete">
+                        清空
+                    </el-button>
+                    <el-button type="primary" @click="sendMessage" :loading="loading" class="send-button"
+                        icon="Promotion">
+                        发送<span class="shortcut-hint">ctrl+enter</span>
+                    </el-button>
+                </div>
             </div>
         </div>
     </div>
@@ -81,6 +64,33 @@ const loading = ref(false)
 const messageContainer = ref<HTMLElement | null>(null)
 const chatMessages = ref<Array<{ role: string, reasoning_content: string, content: string, usage?: string, tag?: string }>>([])
 const messageKey = ref(new Date().getTime())
+const selectedScene = ref('')
+const sceneOptions = ref([
+    { value: '你是WebStartUI的智能助手且是一个前端高手，回答问题时，请使用markdown格式。', label: 'WebStartUI智能助手' },
+    { value: '你是一个精通各国语言的全能助手，根据用户的需求结合自己的能力进行回答。', label: '翻译助手' },
+    { value: '你是一个经验丰富的UI设计师，根据用户的需求结合自己的能力进行回答。', label: 'UI设计助手' },
+    { value: '你是一个经验丰富的开发工程师，根据用户的需求结合自己的能力进行回答。', label: '开发助手' },
+    { value: '你是一个经验丰富的产品经理，根据用户的需求结合自己的能力进行回答。', label: '产品经理助手' },
+    { value: '你是一个经验丰富的项目经理，根据用户的需求结合自己的能力进行回答。', label: '项目经理助手' },
+    { value: '你是一个经验丰富的测试工程师，根据用户的需求结合自己的能力进行回答。', label: '测试工程师助手' },
+    { value: '你是一个经验丰富的运维工程师，根据用户的需求结合自己的能力进行回答。', label: '运维工程师助手' },
+    { value: '你是一个经验丰富的安全工程师，根据用户的需求结合自己的能力进行回答。', label: '安全工程师助手' },
+    { value: '你是一个经验丰富的数据库工程师，根据用户的需求结合自己的能力进行回答。', label: '数据库工程师助手' },
+    { value: '你是一个经验丰富的网络安全工程师，根据用户的需求结合自己的能力进行回答。', label: '网络安全工程师助手' },
+    { value: '你是一个经验丰富的文案编辑，根据用户的需求结合自己的能力进行回答。', label: '文案编辑助手' },
+    { value: '你是一个经验丰富的市场营销专家，根据用户的需求结合自己的能力进行回答。', label: '市场营销专家助手' },
+    { value: '你是一个经验丰富的公关专家，根据用户的需求结合自己的能力进行回答。', label: '公关专家助手' },
+    { value: '你是一个经验丰富的法律顾问，根据用户的需求结合自己的能力进行回答。', label: '法律顾问助手' },
+    { value: '你是一个经验丰富的会计师，根据用户的需求结合自己的能力进行回答。', label: '会计师助手' },
+    { value: '你是一个经验丰富的审计师，根据用户的需求结合自己的能力进行回答。', label: '审计师助手' },
+    { value: '你是一个经验丰富的人力资源专家，根据用户的需求结合自己的能力进行回答。', label: '人力资源专家助手' },
+    { value: '你是一个经验丰富的行政管理专家，根据用户的需求结合自己的能力进行回答。', label: '行政管理专家助手' },
+    { value: '你是一个经验丰富的游戏高手，根据用户的需求结合自己的能力进行回答。', label: '游戏高手助手' },
+    { value: '你是一个经验丰富的摄影爱好者，根据用户的需求结合自己的能力进行回答。', label: '摄影爱好者助手' },
+    { value: '你是一个经验丰富的音乐爱好者，根据用户的需求结合自己的能力进行回答。', label: '音乐爱好者助手' },
+    { value: '你是一个经验丰富的美术爱好者，根据用户的需求结合自己的能力进行回答。', label: '美术爱好者助手' },
+    { value: '你是一个经验丰富的书法爱好者，根据用户的需求结合自己的能力进行回答。', label: '书法爱好者助手' },
+])
 
 onMounted(() => {
     init()
@@ -89,6 +99,7 @@ onMounted(() => {
 // 初始化
 const init = () => {
     chatMessages.value = []
+    selectedScene.value = sceneOptions.value[0].value
     // 获取聊天记录
     window.ipcRenderer.invoke('db', {
         table: 'ai_chat_history',
@@ -157,7 +168,7 @@ const sendMessage = async () => {
         chatMessages.value.push(assistantMessage)
 
         // 创建响应处理器
-        const response = await deepSeekR1(data)
+        const response = await deepSeekR1(data, selectedScene.value)
         userInput.value = ''
 
         if (response.status != 200) {
@@ -184,33 +195,36 @@ const sendMessage = async () => {
 
             for (const line of lines) {
                 if (line.endsWith('[DONE]')) {
-                    console.log('结束');
                     // 如果结束的时候assistantMessage.content为空，则输入内容，且tag为default
                     if (!assistantMessage.content) {
                         assistantMessage.content = '服务器繁忙，请稍后再试。'
                         assistantMessage.tag = 'default'
                         messageKey.value = new Date().getTime() + Math.random()
                     }
-                } else if (line.startsWith('data: ')) {
+                } else if (line.startsWith('data: ') && !line.includes('keep-alive')) {
                     let data: { choices: Array<{ delta: { reasoning_content: string, content: string } }> } = {
                         choices: [{ delta: { reasoning_content: '', content: '' } }]
                     }
                     try {
-                        const jsonStr = line.split('data: ')[1]
+                        const start = line.indexOf('{')
+                        const end = line.lastIndexOf('}') + 1
+                        const jsonStr = line.substring(start, end)
                         if (jsonStr) {
                             data = JSON.parse(jsonStr)
                         }
                     } catch (err) {
                         console.error('JSON解析失败:', err)
                         data = { choices: [{ delta: { reasoning_content: '', content: '' } }] }
+                    } finally {
+                        if (data.choices?.[0]?.delta?.reasoning_content) {
+                            assistantMessage.reasoning_content += data.choices[0].delta.reasoning_content
+                        }
+                        if (data.choices?.[0]?.delta?.content) {
+                            assistantMessage.tag = 'generating'
+                            assistantMessage.content += data.choices[0].delta.content
+                        }
                     }
-                    if (data.choices?.[0]?.delta?.reasoning_content) {
-                        assistantMessage.reasoning_content += data.choices[0].delta.reasoning_content
-                    }
-                    if (data.choices?.[0]?.delta?.content) {
-                        assistantMessage.tag = 'generating'
-                        assistantMessage.content += data.choices[0].delta.content
-                    }
+
                 }
                 messageKey.value = new Date().getTime() + Math.random()
             }
@@ -315,7 +329,7 @@ const clearChatHistory = () => {
         &::-webkit-scrollbar-thumb {
             background: rgba(0, 0, 0, 0.1);
             border-radius: 3px;
-            
+
             &:hover {
                 background: rgba(0, 0, 0, 0.2);
             }
@@ -327,12 +341,12 @@ const clearChatHistory = () => {
     margin-bottom: 20px;
     max-width: 80%;
     opacity: 0;
-    
+
     &.user {
         margin-left: auto;
         animation: fadeInRight 0.5s ease-in-out forwards;
     }
-    
+
     &.assistant {
         margin-right: auto;
         animation: fadeInLeft 0.5s ease-in-out forwards;
@@ -354,7 +368,7 @@ const clearChatHistory = () => {
     font-size: 14px;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    
+
     &:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -392,9 +406,17 @@ const clearChatHistory = () => {
 }
 
 @keyframes typing {
-    from { border-color: transparent }
-    50% { border-color: currentColor }
-    to { border-color: transparent }
+    from {
+        border-color: transparent
+    }
+
+    50% {
+        border-color: currentColor
+    }
+
+    to {
+        border-color: transparent
+    }
 }
 
 .user {
@@ -428,7 +450,18 @@ const clearChatHistory = () => {
 
 .button-group {
     display: flex;
+    justify-content: space-between;
     gap: 10px;
+    width: 100%;
+}
+
+.right-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.scene-selector {
+    width: 180px;
 }
 
 .input-transition {
@@ -438,7 +471,7 @@ const clearChatHistory = () => {
         resize: none;
         border-radius: 8px;
         transition: all 0.3s ease;
-        
+
         &:focus {
             box-shadow: 0 0 0 2px rgba(var(--el-color-primary-rgb), 0.2);
             transform: translateY(-1px);
@@ -446,9 +479,10 @@ const clearChatHistory = () => {
     }
 }
 
-.send-button, .clear-button {
+.send-button,
+.clear-button {
     transition: all 0.3s ease;
-    
+
     &:not(:disabled):hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
